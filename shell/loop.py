@@ -31,7 +31,7 @@ from rich.table import Table
 
 from shell.config.schema import ShellConfig
 
-console = Console(force_terminal=True)
+console = Console(force_terminal=True, force_jupyter=False, no_color=False, highlight=False)
 
 # One-shot bash bypass flag — set by Ctrl+B, cleared after one command
 _bypass_next: bool = False
@@ -240,29 +240,23 @@ def _check_and_enforce_budget(db, config: ShellConfig, session_id: str) -> bool:
     return True
 
 
-_HELP_TEXT = """
-[bold cyan]Agentic Shell — Built-in Commands[/bold cyan]
-
-[bold]Navigation & Session[/bold]
-  [cyan]/new[/cyan]           Start a fresh tmux session (resets context)
-  [cyan]/clear[/cyan]         Clear the terminal screen
-  [cyan]/exit[/cyan]          Exit the shell
-
-[bold]Configuration[/bold]
-  [cyan]/config[/cyan]        Open settings panel (also Ctrl+X)
-  [cyan]/mode[/cyan]          Toggle routing mode: auto ↔ prefix (>> for LLM)
-  [cyan]/model[/cyan]         Show current LLM model and backend
-
-[bold]Budget & Telemetry[/bold]
-  [cyan]/stats[/cyan]         Show last 7 days of token usage
-  [cyan]/budget reset[/cyan]  Clear hard-stop budget flag
-  [cyan]/memory[/cyan]        View and optionally clear session context
-
-[bold]Input Modes[/bold]
-  [cyan]>> text[/cyan]        Force agentic (prefix mode)
-  [cyan]Ctrl+B[/cyan]         Next command runs as raw bash
-  [cyan]Ctrl+T[/cyan]         Toggle telemetry sidebar
-"""
+_HELP_TEXT = (
+    "\nAgentic Shell - Built-in Commands\n"
+    "----------------------------------\n"
+    "  /new           Start a fresh tmux session\n"
+    "  /clear         Clear the terminal screen\n"
+    "  /exit          Exit the shell\n"
+    "  /config        Open settings panel (Ctrl+X)\n"
+    "  /mode          Toggle routing: auto / prefix\n"
+    "  /model         Show current LLM model\n"
+    "  /stats         Last 7 days token usage\n"
+    "  /budget reset  Clear hard-stop budget flag\n"
+    "  /memory        View/clear session context\n"
+    "\n"
+    "  >> text        Force agentic (prefix mode)\n"
+    "  Ctrl+B         Next command runs as raw bash\n"
+    "  Ctrl+T         Toggle telemetry sidebar\n"
+)
 
 
 def _handle_builtin(line: str, db, session_id: str, config: ShellConfig) -> bool:
@@ -272,7 +266,8 @@ def _handle_builtin(line: str, db, session_id: str, config: ShellConfig) -> bool
     cmd = line.strip()
 
     if cmd in ("/help", "/?"):
-        console.print(_HELP_TEXT)
+        sys.stdout.write(_HELP_TEXT + "\n")
+        sys.stdout.flush()
         return True
 
     if cmd == "/clear":

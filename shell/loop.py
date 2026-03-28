@@ -23,6 +23,12 @@ def _out(text: str) -> None:
     sys.stdout.flush()
 
 
+def _write_thinking() -> None:
+    """Print ✦ thinking... in soft purple. Caller overwrites with \r after LLM responds."""
+    sys.stdout.write('\033[38;5;141m  ✦ thinking...\033[0m')
+    sys.stdout.flush()
+
+
 def _render_prompt(cwd: str, last_exit: int) -> str:
     """Return a Powerline-style prompt string for prompt_toolkit HTML().
 
@@ -531,8 +537,13 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
             continue
 
         try:
+            _write_thinking()
             response = asyncio.run(_call_llm(backend, line, cwd, config, session_context))
+            sys.stdout.write('\r' + ' ' * 20 + '\r')
+            sys.stdout.flush()
         except KeyboardInterrupt:
+            sys.stdout.write('\r' + ' ' * 20 + '\r')
+            sys.stdout.flush()
             _out("cancelled")
             continue
 

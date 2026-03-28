@@ -79,7 +79,8 @@ def main() -> None:
 
     from shell import loop  # lazy import to avoid circular imports
 
-    # Welcome banner
+    # Clear screen then show welcome banner
+    sys.stdout.write("\033[2J\033[H")  # clear screen + move cursor to top
     sys.stdout.write("\n\033[38;5;141m  ✦ Agentic Shell\033[0m\n")
     sys.stdout.write(f"\033[2;37m  {config.backend} · {config.model}  |  type naturally or use bash directly\033[0m\n\n")
     sys.stdout.flush()

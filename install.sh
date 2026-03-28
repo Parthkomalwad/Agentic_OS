@@ -43,15 +43,16 @@ if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
     if tmux has-session -t "\$SESSION" 2>/dev/null; then
         exec tmux attach-session -t "\$SESSION"
     else
-        # Create session with auto-restart loop for the shell pane
+        # Create session: pane 0 = main shell (left), pane 1 = telemetry (right, 45 cols)
         tmux new-session -d -s "\$SESSION" -x 220 -y 50
         tmux split-window -h -t "\$SESSION":0.0 -l 45
+        tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1
 
-        # Telemetry sidebar (pane 1) — restart on crash
-        tmux send-keys -t "\$SESSION":0.1 "while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
+        # Telemetry sidebar (pane 1) — trap INT so Ctrl+C doesn't kill the loop
+        tmux send-keys -t "\$SESSION":0.1 "trap '' INT; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
 
-        # Main shell (pane 0) — restart on crash, with 1s delay to show error
-        tmux send-keys -t "\$SESSION":0.0 "while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
+        # Main shell (pane 0) — trap INT so Ctrl+C goes to shell.main not the loop
+        tmux send-keys -t "\$SESSION":0.0 "trap '' INT; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
 
         tmux select-pane -t "\$SESSION":0.0
         exec tmux attach-session -t "\$SESSION"

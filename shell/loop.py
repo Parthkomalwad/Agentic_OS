@@ -71,19 +71,28 @@ def _write_thinking() -> None:
     sys.stdout.flush()
 
 
-def _print_exec_result(exit_code: int, elapsed: float) -> None:
+def _print_exec_result(exit_code: int, elapsed: float, cost_usd: float = 0.0, total_tokens: int = 0) -> None:
     """Print ✓ done in Xs or ✗ exit N (Xs) after command execution.
 
     Only called for agentic commands — pure bash gets no chrome.
     """
     GREEN = '\033[38;5;114m'
     RED = '\033[38;5;203m'
+    DIM = '\033[38;5;238m'
     RESET = '\033[0m'
 
-    if exit_code == 0:
-        sys.stdout.write(f'\n  {GREEN}✓ done in {elapsed:.1f}s{RESET}\n\n')
+    if total_tokens > 0:
+        if cost_usd > 0:
+            cost_part = f'  {DIM}·   ${cost_usd:.4f} · {total_tokens} tok{RESET}'
+        else:
+            cost_part = f'  {DIM}·   {total_tokens} tok{RESET}'
     else:
-        sys.stdout.write(f'\n  {RED}✗ exit {exit_code}  ({elapsed:.1f}s){RESET}\n\n')
+        cost_part = ''
+
+    if exit_code == 0:
+        sys.stdout.write(f'\n  {GREEN}✓ done in {elapsed:.1f}s{RESET}{cost_part}\n\n')
+    else:
+        sys.stdout.write(f'\n  {RED}✗ exit {exit_code}  ({elapsed:.1f}s){RESET}{cost_part}\n\n')
     sys.stdout.flush()
 
 
@@ -665,6 +674,8 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
 
         if response.plan:
             last_exit = execute_plan(response.plan, cwd, description=line)
+            sys.stdout.write(f'  \033[38;5;238m·   ${response.cost_usd:.4f} · {response.prompt_tokens + response.completion_tokens} tok\033[0m\n')
+            sys.stdout.flush()
             _log_event(db, session_id, response, str(response.plan), last_exit, line)
             turns.append({"role": "user", "content": line})
             turns.append({"role": "assistant", "content": f"plan: {response.plan}"})
@@ -687,7 +698,7 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
         exit_code, _ = execute_bash(command, cwd)
         _elapsed = _time.monotonic() - _t0
         _last_exit = exit_code
-        _print_exec_result(exit_code, _elapsed)
+        _print_exec_result(exit_code, _elapsed, cost_usd=response.cost_usd, total_tokens=response.prompt_tokens + response.completion_tokens)
 
         _log_event(db, session_id, response, command, exit_code, line)
         _audit_log("agentic", command, exit_code)

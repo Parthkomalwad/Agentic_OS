@@ -342,22 +342,43 @@ def _show_memory(session_id: str) -> None:
 
 def _start_new_session() -> None:
     import subprocess, shutil, time
-    tmux_pane = os.environ.get("TMUX_PANE") or os.environ.get("TMUX")
-    if not tmux_pane or not shutil.which("tmux"):
-        _out("Not inside tmux — restarting shell process.")
+    if not shutil.which("tmux"):
+        _out("tmux not found — restarting shell process.")
         os.execv(sys.executable, [sys.executable, "-m", "shell.main"])
         return
+
     _out("Starting new session...")
     try:
         result = subprocess.run(["tmux", "display-message", "-p", "#S"], capture_output=True, text=True)
         current_session = result.stdout.strip()
     except Exception:
         current_session = ""
+
     new_name = f"agentic-{int(time.time()) % 10000}"
+    install_dir = os.environ.get("PYTHONPATH", "")
+    venv_python = os.environ.get("AGENTIC_PYTHON", sys.executable)
+
     try:
+        # Create session with proper dimensions
         subprocess.run(["tmux", "new-session", "-d", "-s", new_name, "-x", "220", "-y", "50"], check=True)
-        subprocess.run(["tmux", "send-keys", "-t", new_name, "agentic-shell", "Enter"], check=True)
+
+        # Pane 0 = shell (left), split right for telemetry (pane 1, 45 cols)
+        subprocess.run(["tmux", "split-window", "-h", "-t", f"{new_name}:0.0", "-l", "45"], check=True)
+        subprocess.run(["tmux", "swap-pane", "-s", f"{new_name}:0.0", "-t", f"{new_name}:0.1"], check=True)
+
+        # Telemetry in pane 1 (right after swap)
+        subprocess.run(["tmux", "send-keys", "-t", f"{new_name}:0.1",
+            f"trap '' INT; while true; do PYTHONPATH={install_dir} PROMPT_TOOLKIT_NO_CPR=1 {venv_python} -m shell.telemetry.watch; sleep 2; done",
+            "Enter"], check=True)
+
+        # Shell in pane 0 (left after swap)
+        subprocess.run(["tmux", "send-keys", "-t", f"{new_name}:0.0",
+            f"trap '' INT; while true; do PYTHONPATH={install_dir} PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 {venv_python} -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done",
+            "Enter"], check=True)
+
+        subprocess.run(["tmux", "select-pane", "-t", f"{new_name}:0.0"], check=True)
         subprocess.run(["tmux", "switch-client", "-t", new_name], check=True)
+
         if current_session and current_session != new_name:
             subprocess.run(["tmux", "kill-session", "-t", current_session])
     except Exception as exc:

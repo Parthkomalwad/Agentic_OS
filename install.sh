@@ -27,6 +27,7 @@ sudo tee "$WRAPPER" > /dev/null <<EOF
 export PYTHONPATH="$INSTALL_DIR"
 export TERM=xterm-256color
 export PROMPT_TOOLKIT_NO_CPR=1
+export AGENTIC_PYTHON="$VENV_DIR/bin/python"
 PYTHON="$VENV_DIR/bin/python"
 SESSION="agentic-shell-\${USER}"
 STAMP_FILE="\$HOME/.local/share/agentic-shell/install_stamp"

@@ -13,8 +13,50 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.formatted_text import HTML, ANSI
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.completion import Completer, Completion, PathCompleter, merge_completers
+from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
 from shell.config.schema import ShellConfig
+
+
+class _ShellCompleter(Completer):
+    """Tab completer: first word = command from PATH, rest = filesystem paths."""
+
+    def __init__(self) -> None:
+        self._path_completer = PathCompleter(expanduser=True)
+        self._bins: list[str] = []
+        self._bins_loaded = False
+
+    def _load_bins(self) -> None:
+        """Lazily collect all executable names from PATH directories."""
+        if self._bins_loaded:
+            return
+        seen: set[str] = set()
+        for directory in os.environ.get("PATH", "").split(":"):
+            try:
+                for entry in os.scandir(directory):
+                    if entry.is_file(follow_symlinks=True) and os.access(entry.path, os.X_OK):
+                        seen.add(entry.name)
+            except (PermissionError, FileNotFoundError):
+                pass
+        self._bins = sorted(seen)
+        self._bins_loaded = True
+
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        words = text.split()
+
+        # If no words typed yet, or only one word being typed → complete command name
+        if not words or (len(words) == 1 and not text.endswith(" ")):
+            self._load_bins()
+            prefix = words[0] if words else ""
+            for name in self._bins:
+                if name.startswith(prefix):
+                    yield Completion(name, start_position=-len(prefix))
+            return
+
+        # Otherwise complete the current argument as a filesystem path
+        yield from self._path_completer.get_completions(document, complete_event)
 
 
 def _out(text: str) -> None:
@@ -529,7 +571,13 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
 
     kb = _make_key_bindings(db=db)
     os.environ.setdefault("PROMPT_TOOLKIT_NO_CPR", "1")
-    session = PromptSession(history=FileHistory(str(history_file)), key_bindings=kb)
+    session = PromptSession(
+        history=FileHistory(str(history_file)),
+        key_bindings=kb,
+        completer=_ShellCompleter(),
+        complete_while_typing=False,
+        auto_suggest=AutoSuggestFromHistory(),
+    )
 
     backend = _build_backend(config)
     # Track conversation turns for session continuity

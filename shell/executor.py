@@ -24,6 +24,9 @@ console = Console(highlight=False)
 # Commands we intercept for Rich rendering: cat/head/tail with a single plain filepath
 _VIEW_RE = re.compile(r'^(cat|head|tail)\s+(-n\s*\d+\s+)?([^\s|&;<>]+)$')
 
+# Commands we intercept for Rich ls rendering
+_LS_RE = re.compile(r'^ls(\s+(-[lahAFs1]+))?\s*([^\s|&;<>]*)$')
+
 
 def _rich_cat(filepath: str, command: str) -> tuple[int, str]:
     """Render a file with syntax highlighting inside a panel."""
@@ -63,6 +66,90 @@ def _rich_cat(filepath: str, command: str) -> tuple[int, str]:
     console.print(Panel(syn, title=title, border_style="color(55)", padding=(0, 1)))
     sys.stdout.flush()
     return 0, content
+
+
+def _fmt_size(n: int) -> str:
+    for unit in ("B", "K", "M", "G", "T"):
+        if n < 1024:
+            return f"{n:.0f}{unit}"
+        n /= 1024
+    return f"{n:.0f}P"
+
+
+def _rich_ls(path: str, flags: str) -> tuple[int, str]:
+    """Render directory listing with Rich columns."""
+    import stat as _stat
+    from rich.columns import Columns
+    from rich.text import Text
+
+    target = path or os.getcwd()
+    target = os.path.expanduser(os.path.expandvars(target))
+
+    try:
+        entries = list(os.scandir(target))
+    except PermissionError:
+        sys.stdout.write(f"ls: {target}: Permission denied\n")
+        sys.stdout.flush()
+        return 1, ""
+    except FileNotFoundError:
+        sys.stdout.write(f"ls: {target}: No such file or directory\n")
+        sys.stdout.flush()
+        return 1, ""
+
+    show_hidden = 'a' in flags or 'A' in flags
+    if not show_hidden:
+        entries = [e for e in entries if not e.name.startswith('.')]
+
+    entries.sort(key=lambda e: e.name.lower())
+
+    use_long = 'l' in flags
+
+    if use_long:
+        from rich.table import Table
+        table = Table(show_header=False, box=None, padding=(0, 1), show_edge=False)
+        table.add_column("perms", style="color(238)", no_wrap=True)
+        table.add_column("size", justify="right", style="color(238)", no_wrap=True)
+        table.add_column("name", no_wrap=True)
+
+        for entry in entries:
+            try:
+                st = entry.stat(follow_symlinks=False)
+                mode = _stat.filemode(st.st_mode)
+                size = _fmt_size(st.st_size) if 'h' in flags else str(st.st_size)
+            except OSError:
+                mode, size = "?---------", "?"
+
+            if entry.is_dir(follow_symlinks=False):
+                name_text = Text(entry.name + "/", style="color(75) bold")
+            elif entry.is_symlink():
+                name_text = Text(entry.name, style="color(141)")
+            elif entry.is_file() and os.access(entry.path, os.X_OK):
+                name_text = Text(entry.name + "*", style="color(114) bold")
+            else:
+                name_text = Text(entry.name, style="color(253)")
+
+            table.add_row(mode, size, name_text)
+
+        console.print(table)
+    else:
+        from rich.columns import Columns
+        from rich.text import Text
+        items = []
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                items.append(Text(entry.name + "/", style="color(75) bold"))
+            elif entry.is_symlink():
+                items.append(Text(entry.name, style="color(141)"))
+            elif entry.is_file() and os.access(entry.path, os.X_OK):
+                items.append(Text(entry.name + "*", style="color(114) bold"))
+            else:
+                items.append(Text(entry.name, style="color(253)"))
+
+        if items:
+            console.print(Columns(items, equal=True, expand=False))
+
+    sys.stdout.flush()
+    return 0, ""
 
 
 def _pty_exec(command: str, cwd: str) -> tuple[int, str]:
@@ -112,6 +199,13 @@ def execute_bash(command: str, cwd: str) -> tuple[int, str]:
             sys.stdout.write(f"cd: {target}: No such file or directory\n")
             sys.stdout.flush()
             return 1, ""
+
+    # Rich ls interception
+    ls_m = _LS_RE.match(stripped)
+    if ls_m and not any(c in stripped for c in ('|', '>', '<', '&', ';')):
+        flags = ls_m.group(2) or ""
+        path = ls_m.group(3) or ""
+        return _rich_ls(path, flags)
 
     # Rich file-view interception for cat/head/tail of a single plain file
     m = _VIEW_RE.match(stripped)

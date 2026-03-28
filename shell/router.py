@@ -24,6 +24,14 @@ QUESTION_WORDS = {'what', 'how', 'why', 'where', 'when', 'which'}
 ARTICLES = {'the', 'a', 'an'}
 INSTRUCTIONAL_PHRASES = ['show me', 'find all', 'list all', 'give me', 'check if', 'how do', 'can you']
 
+# Shell builtins that are never in PATH but must always route to bash
+SHELL_BUILTINS = {
+    'cd', 'export', 'source', 'alias', 'unalias', 'exit', 'eval',
+    'set', 'unset', 'exec', 'type', 'read', 'echo', 'printf',
+    'pushd', 'popd', 'dirs', 'jobs', 'fg', 'bg', 'wait', 'kill',
+    'history', 'fc', 'umask', 'ulimit', 'true', 'false',
+}
+
 
 def classify(line: str, mode: str = "auto") -> Route:
     """Classify a line of input as BASH, AGENTIC, or AMBIGUOUS.
@@ -51,6 +59,10 @@ def classify(line: str, mode: str = "auto") -> Route:
 
     words = stripped.lower().split()
     first_word = words[0] if words else ""
+
+    # Shell builtins always route to bash immediately
+    if first_word in SHELL_BUILTINS:
+        return Route.BASH
 
     # Bash signals
     if shutil.which(first_word):

@@ -188,28 +188,47 @@ async def _call_llm(backend, user_input: str, cwd: str, config: ShellConfig, ses
 
 
 def _display_command_preview(response) -> str | None:
-    _out("")
-    _out(f"  {response.explanation}")
-    _out("  $ " + response.command)
-    _out("")
+    """Display styled explanation + command preview, then prompt for confirm/edit/cancel.
+
+    Output format:
+      ✦ <explanation>
+
+      $ <command>
+
+      ↵ run   e edit   q cancel  ›
+    """
+    PURPLE = '\033[38;5;141m'
+    BRIGHT_WHITE = '\033[1;37m'
+    DIM = '\033[2;37m'
+    RESET = '\033[0m'
+
+    sys.stdout.write('\n')
+    sys.stdout.write(f'{PURPLE}  ✦{RESET} {response.explanation}\n')
+    sys.stdout.write('\n')
+    sys.stdout.write(f'  {BRIGHT_WHITE}$ {response.command}{RESET}\n')
+    sys.stdout.write('\n')
+    sys.stdout.write(f'  {DIM}↵ run   e edit   q cancel  ›{RESET}\n')
+    sys.stdout.flush()
 
     try:
-        answer = input("run? [Enter=yes  e=edit  q=cancel]: ").strip()
+        answer = input('').strip()
     except (EOFError, KeyboardInterrupt):
         return None
 
-    if answer.lower() == "q":
-        _out("cancelled")
+    if answer.lower() == 'q':
+        sys.stdout.write(f'  {DIM}cancelled{RESET}\n')
+        sys.stdout.flush()
         return None
 
-    if answer.lower() == "e":
+    if answer.lower() == 'e':
+        sys.stdout.write(f'  edit> ')
+        sys.stdout.flush()
         try:
-            edited = input(f"edit> ").strip()
+            edited = input('').strip()
         except (EOFError, KeyboardInterrupt):
             return None
         return edited or response.command
 
-    # Enter or anything else = run as-is
     return response.command
 
 

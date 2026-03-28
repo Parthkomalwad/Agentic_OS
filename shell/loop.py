@@ -31,7 +31,7 @@ from rich.table import Table
 
 from shell.config.schema import ShellConfig
 
-console = Console(force_terminal=True, force_jupyter=False, no_color=False, highlight=False)
+console = Console(force_terminal=True, force_jupyter=False, highlight=False, width=120)
 
 # One-shot bash bypass flag — set by Ctrl+B, cleared after one command
 _bypass_next: bool = False

@@ -29,15 +29,30 @@ export TERM=xterm-256color
 export PROMPT_TOOLKIT_NO_CPR=1
 PYTHON="$VENV_DIR/bin/python"
 SESSION="agentic-shell-\${USER}"
+STAMP_FILE="\$HOME/.local/share/agentic-shell/install_stamp"
+CURRENT_STAMP="$INSTALL_DIR:$VENV_DIR"
 
 if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
+    # Kill existing session if install dir has changed
+    SAVED_STAMP="\$(cat "\$STAMP_FILE" 2>/dev/null || echo '')"
+    if tmux has-session -t "\$SESSION" 2>/dev/null && [ "\$SAVED_STAMP" != "\$CURRENT_STAMP" ]; then
+        tmux kill-session -t "\$SESSION" 2>/dev/null || true
+    fi
+    echo "\$CURRENT_STAMP" > "\$STAMP_FILE"
+
     if tmux has-session -t "\$SESSION" 2>/dev/null; then
         exec tmux attach-session -t "\$SESSION"
     else
-        tmux new-session -d -s "\$SESSION"
+        # Create session with auto-restart loop for the shell pane
+        tmux new-session -d -s "\$SESSION" -x 220 -y 50
         tmux split-window -h -t "\$SESSION":0.0 -l 45
-        tmux send-keys -t "\$SESSION":0.1 "PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch" Enter
-        tmux send-keys -t "\$SESSION":0.0 "PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main" Enter
+
+        # Telemetry sidebar (pane 1) — restart on crash
+        tmux send-keys -t "\$SESSION":0.1 "while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
+
+        # Main shell (pane 0) — restart on crash, with 1s delay to show error
+        tmux send-keys -t "\$SESSION":0.0 "while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
+
         tmux select-pane -t "\$SESSION":0.0
         exec tmux attach-session -t "\$SESSION"
     fi

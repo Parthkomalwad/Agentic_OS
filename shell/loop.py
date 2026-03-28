@@ -23,6 +23,66 @@ def _out(text: str) -> None:
     sys.stdout.flush()
 
 
+def _render_prompt(cwd: str, last_exit: int) -> str:
+    """Return a Powerline-style prompt string for prompt_toolkit HTML().
+
+    Segments: [path block] [git branch block] [time block] ❯
+    Uses ANSI 256-color codes via HTML() spans.
+    Falls back gracefully if git is unavailable.
+    """
+    import subprocess
+    import time as _time
+
+    home = str(Path.home())
+    display_cwd = cwd.replace(home, "~") if cwd.startswith(home) else cwd
+
+    # Git branch (silent fail)
+    branch = ""
+    try:
+        res = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True, text=True, timeout=1
+        )
+        branch = res.stdout.strip()
+    except Exception:
+        pass
+
+    hhmm = _time.strftime("%H:%M")
+
+    # Path segment — soft blue bg (#005f87 = 24)
+    path_seg = (
+        '\033[48;5;24m\033[97m'   # blue bg, bright white fg
+        f' {display_cwd} '
+        '\033[0m'
+        '\033[38;5;24m\033[48;5;55m\ue0b0\033[0m'  # powerline arrow (Unicode or space fallback)
+    )
+
+    # Git segment — soft purple bg (55)
+    git_seg = ""
+    if branch:
+        git_seg = (
+            '\033[48;5;55m\033[97m'
+            f'  {branch} '
+            '\033[0m'
+            '\033[38;5;55m\033[48;5;236m\ue0b0\033[0m'
+        )
+
+    # Time segment — dark grey bg (236)
+    time_seg = (
+        '\033[48;5;236m\033[2;37m'
+        f' {hhmm} '
+        '\033[0m '
+    )
+
+    # Cursor — white normally, red if last exit non-zero
+    if last_exit != 0:
+        cursor = '\033[38;5;203m❯\033[0m'
+    else:
+        cursor = '\033[0;37m❯\033[0m'
+
+    return path_seg + git_seg + time_seg + cursor + ' '
+
+
 # One-shot bash bypass flag — set by Ctrl+B, cleared after one command
 _bypass_next: bool = False
 _offline_mode: bool = False

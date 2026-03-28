@@ -87,6 +87,7 @@ def _render_prompt(cwd: str, last_exit: int) -> str:
 _bypass_next: bool = False
 _offline_mode: bool = False
 _budget_hard_stop: bool = False
+_last_exit: int = 0
 
 
 def set_offline_mode(offline: bool) -> None:
@@ -448,7 +449,7 @@ def _start_new_session() -> None:
 
 
 def start(config: ShellConfig, session_id: str, session_context: str = "") -> None:
-    global _bypass_next
+    global _bypass_next, _last_exit
 
     from shell.executor import execute_bash
     from shell.router import classify, Route
@@ -475,7 +476,7 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
         try:
             cwd = os.getcwd()
             user_input = session.prompt(
-                HTML(f'<ansigreen>{cwd}</ansigreen> <ansicyan>❯</ansicyan> '),
+                _render_prompt(cwd, _last_exit),
                 in_thread=True
             )
         except EOFError:

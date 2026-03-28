@@ -266,37 +266,19 @@ def run():
     from shell.telemetry.db import Database
     db = Database()
     model = "unknown"
-    prev_lines: List[str] = []
-
-    # Tick counters — different panels refresh at different rates
-    tick = 0  # increments every 1s
-    # CPU/uptime: every tick (1s)
-    # RAM/disk/procs: every 5 ticks (5s)
-    # git/tokens/session: every 10 ticks (10s)
-
     try:
-        # Initial full paint
-        m = db.get_last_model()
-        model = m if m != "unknown" else _get_config_model()
-        frame = _render_all(db, model)
-        sys.stdout.write("\033[2J\033[H" + frame)
-        sys.stdout.flush()
-        prev_lines = frame.splitlines()
-
         while True:
-            time.sleep(1)
-            tick += 1
-
             m = db.get_last_model()
             if m != "unknown":
                 model = m
+            elif model == "unknown":
+                model = _get_config_model()
 
-            # Always re-render (fast — pure string ops, no I/O until diff)
             frame = _render_all(db, model)
-            new_lines = frame.splitlines()
-            _diff_write(prev_lines, new_lines)
-            prev_lines = new_lines
-
+            sys.stdout.write("\033[H")
+            sys.stdout.write(frame)
+            sys.stdout.flush()
+            time.sleep(5)
     except KeyboardInterrupt:
         pass
     finally:

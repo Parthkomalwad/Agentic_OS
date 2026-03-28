@@ -80,10 +80,25 @@ if ! grep -q "$WRAPPER" /etc/shells; then
     echo "$WRAPPER" | sudo tee -a /etc/shells > /dev/null
 fi
 
-echo "==> Setting login shell to $WRAPPER for $REAL_USER"
-sudo chsh -s "$WRAPPER" "$REAL_USER"
+# Revert login shell to /bin/bash (chsh approach is unreliable)
+# Instead, auto-launch via .bashrc on interactive SSH login
+echo "==> Restoring login shell to /bin/bash for $REAL_USER"
+sudo chsh -s /bin/bash "$REAL_USER" 2>/dev/null || true
+
+BASHRC="$REAL_HOME/.bashrc"
+MARKER="# agentic-shell auto-launch"
+if ! grep -q "$MARKER" "$BASHRC" 2>/dev/null; then
+    echo "==> Adding agentic-shell auto-launch to $BASHRC"
+    cat >> "$BASHRC" <<'BASHRC_EOF'
+
+# agentic-shell auto-launch
+if [ -z "$TMUX" ] && [ -z "$AGENTIC_SHELL_NO_AUTO" ] && command -v agentic-shell &>/dev/null; then
+    exec agentic-shell
+fi
+BASHRC_EOF
+fi
 
 echo ""
 echo "✓ agentic-shell installed successfully for $REAL_USER."
 echo "  Venv: $VENV_DIR"
-echo "  Run: agentic-shell"
+echo "  SSH in to start automatically, or run: agentic-shell"

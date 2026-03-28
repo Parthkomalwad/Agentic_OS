@@ -51,7 +51,9 @@ if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
 
     # No existing session — create fresh with 2 panes
     echo "\$CURRENT_STAMP" > "\$STAMP_FILE"
-    tmux new-session -d -s "\$SESSION" -x 220 -y 50
+    _COLS=\$(tput cols 2>/dev/null || echo 220)
+    _ROWS=\$(tput lines 2>/dev/null || echo 50)
+    tmux new-session -d -s "\$SESSION" -x "\$_COLS" -y "\$_ROWS"
     # Enable mouse scrolling + large scrollback buffer
     tmux set-option -t "\$SESSION" mouse on
     tmux set-option -t "\$SESSION" history-limit 50000

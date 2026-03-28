@@ -505,8 +505,11 @@ def _start_new_session() -> None:
     venv_python = os.environ.get("AGENTIC_PYTHON", sys.executable)
 
     try:
-        # Create session with proper dimensions
-        subprocess.run(["tmux", "new-session", "-d", "-s", new_name, "-x", "220", "-y", "50"], check=True)
+        # Create session sized to current terminal
+        import shutil as _shutil
+        _ts = os.get_terminal_size(_shutil.get_terminal_size((220, 50)))
+        subprocess.run(["tmux", "new-session", "-d", "-s", new_name,
+                        "-x", str(_ts.columns), "-y", str(_ts.lines)], check=True)
 
         # Pane 0 = shell (left), split right for telemetry (pane 1, 45 cols)
         subprocess.run(["tmux", "split-window", "-h", "-t", f"{new_name}:0.0", "-l", "48"], check=True)

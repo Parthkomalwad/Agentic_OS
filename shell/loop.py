@@ -121,28 +121,29 @@ async def _call_llm(backend, user_input: str, cwd: str, config: ShellConfig, ses
 
 
 def _display_command_preview(response) -> str | None:
-    from prompt_toolkit import prompt as pt_prompt
-    from prompt_toolkit.formatted_text import HTML as PTHTML
-
     _out("")
-    _out(f"✓ understood: {response.explanation}")
-    _out("─" * 60)
-    _out(response.command)
+    _out(f"  {response.explanation}")
+    _out("  $ " + response.command)
     _out("")
 
     try:
-        answer = pt_prompt(
-            PTHTML("<ansiyellow>run?</ansiyellow> [Enter]  <ansicyan>edit [e]</ansicyan>  <ansired>cancel [q]</ansired>  > "),
-            default=response.command,
-        )
+        answer = input("run? [Enter=yes  e=edit  q=cancel]: ").strip()
     except (EOFError, KeyboardInterrupt):
         return None
 
-    if answer.strip().lower() == "q":
+    if answer.lower() == "q":
         _out("cancelled")
         return None
 
-    return answer.strip() or None
+    if answer.lower() == "e":
+        try:
+            edited = input(f"edit> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        return edited or response.command
+
+    # Enter or anything else = run as-is
+    return response.command
 
 
 def _audit_log(action: str, command: str, exit_code: int | None = None) -> None:

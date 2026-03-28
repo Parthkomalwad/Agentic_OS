@@ -109,6 +109,7 @@ def render_settings_panel(config: object) -> object | None:
             answer = pt_prompt(
                 HTML(f"<ansicyan>{label}:</ansicyan> "),
                 default=display,
+                in_thread=True,
             ).strip()
             if answer != display:
                 updates[attr] = answer

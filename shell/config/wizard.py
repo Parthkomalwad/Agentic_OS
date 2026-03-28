@@ -31,6 +31,7 @@ def _ask(question: str, default: str = "", is_password: bool = False) -> str:
             HTML(f"<ansicyan>{question}</ansicyan> "),
             default=default,
             is_password=is_password,
+            in_thread=True,
         ).strip()
         return answer if answer else default
     except (EOFError, KeyboardInterrupt):

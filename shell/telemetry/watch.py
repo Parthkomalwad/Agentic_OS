@@ -237,6 +237,7 @@ def _panel_shortcuts():
 
 def run():
     from shell.telemetry.db import Database
+    from io import StringIO
     db = Database()
     model = "unknown"
     try:
@@ -247,14 +248,21 @@ def run():
             elif model == "unknown":
                 model = _get_config_model()
 
-            console.clear()
-            console.print(_panel_session(db, model))
-            console.print(_panel_system())
-            console.print(_panel_git())
-            console.print(_panel_processes())
-            console.print(_panel_tokens(db))
-            console.print(_panel_shortcuts())
-            time.sleep(3)
+            # Render all panels into a buffer first, then paint in one shot
+            # cursor-to-home (\033[H) instead of clear (\033[2J) — no flash
+            buf = StringIO()
+            bc = Console(file=buf, force_terminal=True, width=44)
+            bc.print(_panel_session(db, model))
+            bc.print(_panel_system())
+            bc.print(_panel_git())
+            bc.print(_panel_processes())
+            bc.print(_panel_tokens(db))
+            bc.print(_panel_shortcuts())
+
+            sys.stdout.write("\033[H")   # move cursor to top-left, no erase
+            sys.stdout.write(buf.getvalue())
+            sys.stdout.flush()
+            time.sleep(5)
     except KeyboardInterrupt:
         pass
     finally:

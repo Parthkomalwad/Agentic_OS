@@ -19,7 +19,7 @@ from rich.console import Console
 from rich.syntax import Syntax
 from rich.panel import Panel
 
-console = Console(highlight=False, width=120)
+console = Console(highlight=False)
 
 # Commands we intercept for Rich rendering: cat/head/tail with a single plain filepath
 _VIEW_RE = re.compile(r'^(cat|head|tail)\s+(-n\s*\d+\s+)?([^\s|&;<>]+)$')

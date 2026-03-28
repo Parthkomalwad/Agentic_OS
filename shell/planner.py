@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.rule import Rule
 
-_console = Console(highlight=False, width=120)
+_console = Console(highlight=False)
 
 PURPLE = "color(141)"
 GREEN  = "color(114)"

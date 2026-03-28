@@ -11,7 +11,7 @@ os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.formatted_text import HTML, ANSI
 from prompt_toolkit.key_binding import KeyBindings
 
 from shell.config.schema import ShellConfig
@@ -517,7 +517,7 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
         try:
             cwd = os.getcwd()
             user_input = session.prompt(
-                _render_prompt(cwd, _last_exit),
+                ANSI(_render_prompt(cwd, _last_exit)),
                 in_thread=True
             )
         except EOFError:

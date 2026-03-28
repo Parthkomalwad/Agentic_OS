@@ -1,6 +1,7 @@
 """Telemetry sidebar process."""
 from __future__ import annotations
 import sys, time, os, subprocess
+from typing import List
 from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
@@ -248,7 +249,7 @@ def _render_all(db, model) -> str:
     return buf.getvalue()
 
 
-def _diff_write(prev_lines: list[str], new_lines: list[str]) -> None:
+def _diff_write(prev_lines: List[str], new_lines: List[str]) -> None:
     """Rewrite only lines that changed. Cursor moves by line number — no full clear."""
     out = []
     for i, new_line in enumerate(new_lines):
@@ -265,7 +266,7 @@ def run():
     from shell.telemetry.db import Database
     db = Database()
     model = "unknown"
-    prev_lines: list[str] = []
+    prev_lines: List[str] = []
 
     # Tick counters — different panels refresh at different rates
     tick = 0  # increments every 1s
@@ -298,8 +299,6 @@ def run():
 
     except KeyboardInterrupt:
         pass
-    finally:
-        db.close()
     finally:
         db.close()
 

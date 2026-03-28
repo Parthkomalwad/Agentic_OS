@@ -16,19 +16,21 @@ import sys
 from collections import Counter
 
 DESTRUCTIVE_PATTERNS: list[str] = [
-    r"\brm\s+-[^\s]*r[^\s]*\s+\S",   # rm -rf / rm -r (recursive only)
-    r"\bdd\s+if=",
-    r"\bchmod\s+777\b",
-    r"\bkill\s+-9\b",
-    r"\bcurl\b.*\|\s*(bash|sh)\b",
-    r"\bwget\b.*\|\s*(bash|sh)\b",
+    # Disk/filesystem destruction
+    r"\bdd\s+if=.*of=/dev/",          # dd writing to a device
+    r"\bmkfs\b",                       # format filesystem
+    r"\bfdisk\b.*(/dev/)",             # partition a device
+    r">\s*/dev/sd[a-z]\b",            # redirect into raw disk
+    r">\s*/dev/nvme\d",               # redirect into nvme disk
+    # Recursive deletion of real paths (not temp or current-dir relative)
+    r"\brm\s+-[^\s]*r[^\s]*\s+/",    # rm -rf /anything (absolute path)
+    # Pipe-to-shell (arbitrary code execution from network)
+    r"\bcurl\b[^|]*\|\s*(sudo\s+)?(bash|sh)\b",
+    r"\bwget\b[^|]*\|\s*(sudo\s+)?(bash|sh)\b",
+    # System state changes
     r"\bshutdown\b",
     r"\breboot\b",
-    r"\bmkfs\b",
-    r"\bfdisk\b",
-    r"\bformat\b.*(/dev/)",
-    r">\s*/dev/sd[a-z]",
-    r"\biptables\s+-F\b",
+    r"\biptables\s+-F\b",             # flush all firewall rules
 ]
 
 SECRET_PATTERNS: list[str] = [
@@ -62,9 +64,19 @@ def is_destructive(command: str) -> bool:
     return False
 
 
-def confirm_destructive(command: str) -> bool:
-    """Display warning and require 'YES' to proceed. Returns True if confirmed."""
-    sys.stdout.write(f"\n! destructive operation detected\n  command: {command}\n  This operation may be destructive or irreversible.\n")
+def confirm_destructive(command: str, reason: str = "") -> bool:
+    """Display warning and require 'YES' to proceed. Returns True if confirmed.
+
+    Args:
+        command: The command to confirm.
+        reason: Optional reason string (e.g. 'AI flagged as unsafe').
+    """
+    label = reason if reason else "pattern matched as destructive"
+    sys.stdout.write(
+        f"\n\033[38;5;203m  ⚠ {label}\033[0m\n"
+        f"  \033[2;37mcommand:\033[0m {command}\n"
+        f"  \033[2;37mThis operation may be irreversible.\033[0m\n"
+    )
     sys.stdout.flush()
     try:
         answer = input("  type YES to confirm: ").strip()

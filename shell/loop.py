@@ -489,6 +489,26 @@ def _start_new_session() -> None:
         _out(f"Failed to create new session: {exc}")
 
 
+def _save_turns_if_needed(
+    turns: list[dict], session_id: str, config: ShellConfig, force: bool = False
+) -> None:
+    """Save compressed session context every 5 turns or when forced."""
+    if not turns:
+        return
+    if not force and len(turns) % 5 != 0:
+        return
+    try:
+        from shell.memory.compressor import compress
+        from shell.memory.store import save_session_context
+        import tiktoken
+        compressed = compress(turns)
+        enc = tiktoken.get_encoding("cl100k_base")
+        token_count = len(enc.encode(compressed))
+        save_session_context(session_id, compressed, turns, token_count)
+    except Exception:
+        pass
+
+
 def start(config: ShellConfig, session_id: str, session_context: str = "") -> None:
     global _bypass_next, _last_exit
 
@@ -512,6 +532,8 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
     session = PromptSession(history=FileHistory(str(history_file)), key_bindings=kb)
 
     backend = _build_backend(config)
+    # Track conversation turns for session continuity
+    turns: list[dict] = []
 
     while True:
         try:
@@ -521,6 +543,7 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
                 in_thread=True
             )
         except EOFError:
+            _save_turns_if_needed(turns, session_id, config, force=True)
             break
 
         line = user_input.strip()
@@ -592,15 +615,20 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
         if response.plan:
             last_exit = execute_plan(response.plan, cwd, description=line)
             _log_event(db, session_id, response, str(response.plan), last_exit, line)
+            turns.append({"role": "user", "content": line})
+            turns.append({"role": "assistant", "content": f"plan: {response.plan}"})
+            _save_turns_if_needed(turns, session_id, config)
             continue
 
         command = _display_command_preview(response)
         if command is None:
             continue
 
-        final_safe = response.safe and not is_destructive(command)
-        if not final_safe:
-            if not confirm_destructive(command):
+        ai_flagged = not response.safe
+        regex_flagged = is_destructive(command)
+        if ai_flagged or regex_flagged:
+            reason = "AI flagged as potentially unsafe" if ai_flagged else "matched destructive pattern"
+            if not confirm_destructive(command, reason=reason):
                 continue
 
         import time as _time
@@ -612,3 +640,8 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
 
         _log_event(db, session_id, response, command, exit_code, line)
         _audit_log("agentic", command, exit_code)
+
+        # Track turn for session continuity
+        turns.append({"role": "user", "content": line})
+        turns.append({"role": "assistant", "content": f"command: {command}\nexplanation: {response.explanation}"})
+        _save_turns_if_needed(turns, session_id, config)

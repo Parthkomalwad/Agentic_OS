@@ -24,7 +24,9 @@ console = Console(highlight=False)
 # Commands we intercept for Rich rendering: cat/head/tail with a single plain filepath
 _VIEW_RE = re.compile(r'^(cat|head|tail)\s+(-n\s*\d+\s+)?([^\s|&;<>]+)$')
 
-# Commands we intercept for Rich ls rendering
+# Commands we intercept for Rich ls rendering.
+# Allowed flags: l(ong) a(ll) h(uman) A(lmost-all) F(classify) s(size) 1(one-per-line).
+# -R (recursive) and --color are intentionally excluded — fall through to pty.
 _LS_RE = re.compile(r'^ls(\s+(-[lahAFs1]+))?\s*([^\s|&;<>]*)$')
 
 

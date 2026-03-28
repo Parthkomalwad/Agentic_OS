@@ -29,6 +29,22 @@ def _write_thinking() -> None:
     sys.stdout.flush()
 
 
+def _print_exec_result(exit_code: int, elapsed: float) -> None:
+    """Print ✓ done in Xs or ✗ exit N (Xs) after command execution.
+
+    Only called for agentic commands — pure bash gets no chrome.
+    """
+    GREEN = '\033[38;5;114m'
+    RED = '\033[38;5;203m'
+    RESET = '\033[0m'
+
+    if exit_code == 0:
+        sys.stdout.write(f'\n  {GREEN}✓ done in {elapsed:.1f}s{RESET}\n\n')
+    else:
+        sys.stdout.write(f'\n  {RED}✗ exit {exit_code}  ({elapsed:.1f}s){RESET}\n\n')
+    sys.stdout.flush()
+
+
 def _render_prompt(cwd: str, last_exit: int) -> str:
     """Return a Powerline-style prompt string for prompt_toolkit HTML().
 
@@ -544,6 +560,7 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
                     _audit_log("destructive_blocked", line)
                     continue
             exit_code, _ = execute_bash(line, cwd)
+            _last_exit = exit_code
             _audit_log("bash", line, exit_code)
             if exit_code != 0:
                 _out(f"exit {exit_code}")
@@ -586,9 +603,12 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
             if not confirm_destructive(command):
                 continue
 
+        import time as _time
+        _t0 = _time.monotonic()
         exit_code, _ = execute_bash(command, cwd)
-        if exit_code != 0:
-            _out(f"exit {exit_code}")
+        _elapsed = _time.monotonic() - _t0
+        _last_exit = exit_code
+        _print_exec_result(exit_code, _elapsed)
 
         _log_event(db, session_id, response, command, exit_code, line)
         _audit_log("agentic", command, exit_code)

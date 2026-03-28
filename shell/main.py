@@ -76,9 +76,8 @@ def main() -> None:
     except Exception:
         pass  # Session resume is best-effort
 
-    # --- Launch tmux session with sidebar (no-op if already in tmux or --no-tmux passed) ---
-    no_tmux = "--no-tmux" in sys.argv or os.environ.get("NO_TMUX") or os.environ.get("TMUX")
-    if not no_tmux:
+    # --- Launch tmux session with sidebar (no-op if already in tmux or tmux unavailable) ---
+    if False:  # tmux handled by wrapper script
         try:
             from shell.tui.layout import create_session
             create_session(username)

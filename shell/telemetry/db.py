@@ -203,6 +203,7 @@ class Database:
             "created_at": row[3],
         }
 
+
     def get_last_model(self) -> str:
         """Return the most recently used model name, or 'unknown'."""
         row = self._conn.execute(
@@ -212,6 +213,7 @@ class Database:
 
     def get_today_stats(self) -> dict:
         """Return today's total calls, tokens, and cost."""
+        from datetime import date
         today = date.today().isoformat()
         row = self._conn.execute(
             """SELECT COUNT(*), COALESCE(SUM(total_tokens), 0), COALESCE(SUM(cost_usd), 0.0)

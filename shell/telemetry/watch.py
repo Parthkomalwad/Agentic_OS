@@ -235,36 +235,71 @@ def _panel_shortcuts():
 
 # ── main render loop ──────────────────────────────────────
 
+def _render_all(db, model) -> str:
+    from io import StringIO
+    buf = StringIO()
+    bc = Console(file=buf, force_terminal=True, width=44)
+    bc.print(_panel_session(db, model))
+    bc.print(_panel_system())
+    bc.print(_panel_git())
+    bc.print(_panel_processes())
+    bc.print(_panel_tokens(db))
+    bc.print(_panel_shortcuts())
+    return buf.getvalue()
+
+
+def _diff_write(prev_lines: list[str], new_lines: list[str]) -> None:
+    """Rewrite only lines that changed. Cursor moves by line number — no full clear."""
+    out = []
+    for i, new_line in enumerate(new_lines):
+        prev = prev_lines[i] if i < len(prev_lines) else None
+        if new_line != prev:
+            # move to row i+1, col 1; erase to end of line; write new content
+            out.append(f"\033[{i+1};1H\033[K{new_line}")
+    if out:
+        sys.stdout.write("".join(out))
+        sys.stdout.flush()
+
+
 def run():
     from shell.telemetry.db import Database
-    from io import StringIO
     db = Database()
     model = "unknown"
+    prev_lines: list[str] = []
+
+    # Tick counters — different panels refresh at different rates
+    tick = 0  # increments every 1s
+    # CPU/uptime: every tick (1s)
+    # RAM/disk/procs: every 5 ticks (5s)
+    # git/tokens/session: every 10 ticks (10s)
+
     try:
+        # Initial full paint
+        m = db.get_last_model()
+        model = m if m != "unknown" else _get_config_model()
+        frame = _render_all(db, model)
+        sys.stdout.write("\033[2J\033[H" + frame)
+        sys.stdout.flush()
+        prev_lines = frame.splitlines()
+
         while True:
+            time.sleep(1)
+            tick += 1
+
             m = db.get_last_model()
             if m != "unknown":
                 model = m
-            elif model == "unknown":
-                model = _get_config_model()
 
-            # Render all panels into a buffer first, then paint in one shot
-            # cursor-to-home (\033[H) instead of clear (\033[2J) — no flash
-            buf = StringIO()
-            bc = Console(file=buf, force_terminal=True, width=44)
-            bc.print(_panel_session(db, model))
-            bc.print(_panel_system())
-            bc.print(_panel_git())
-            bc.print(_panel_processes())
-            bc.print(_panel_tokens(db))
-            bc.print(_panel_shortcuts())
+            # Always re-render (fast — pure string ops, no I/O until diff)
+            frame = _render_all(db, model)
+            new_lines = frame.splitlines()
+            _diff_write(prev_lines, new_lines)
+            prev_lines = new_lines
 
-            sys.stdout.write("\033[H")   # move cursor to top-left, no erase
-            sys.stdout.write(buf.getvalue())
-            sys.stdout.flush()
-            time.sleep(5)
     except KeyboardInterrupt:
         pass
+    finally:
+        db.close()
     finally:
         db.close()
 

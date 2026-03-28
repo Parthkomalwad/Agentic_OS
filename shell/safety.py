@@ -22,8 +22,8 @@ DESTRUCTIVE_PATTERNS: list[str] = [
     r"\bfdisk\b.*(/dev/)",             # partition a device
     r">\s*/dev/sd[a-z]\b",            # redirect into raw disk
     r">\s*/dev/nvme\d",               # redirect into nvme disk
-    # Recursive deletion of real paths (not temp or current-dir relative)
-    r"\brm\s+-[^\s]*r[^\s]*\s+/",    # rm -rf /anything (absolute path)
+    # Recursive deletion — any path
+    r"\brm\s+-[^\s]*r[^\s]*\s+\S",   # rm -rf <anything>
     # Pipe-to-shell (arbitrary code execution from network)
     r"\bcurl\b[^|]*\|\s*(sudo\s+)?(bash|sh)\b",
     r"\bwget\b[^|]*\|\s*(sudo\s+)?(bash|sh)\b",

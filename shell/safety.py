@@ -16,7 +16,7 @@ import sys
 from collections import Counter
 
 DESTRUCTIVE_PATTERNS: list[str] = [
-    r"\brm\s+(-[^\s]*f[^\s]*\s+|--force\s+)",
+    r"\brm\s+-[^\s]*r[^\s]*\s+\S",   # rm -rf / rm -r (recursive only)
     r"\bdd\s+if=",
     r"\bchmod\s+777\b",
     r"\bkill\s+-9\b",

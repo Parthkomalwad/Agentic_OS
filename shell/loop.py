@@ -237,6 +237,8 @@ def _handle_builtin(line: str, db, session_id: str, config: ShellConfig) -> bool
         return True
 
     if cmd in ("/exit", "/quit"):
+        import pathlib
+        pathlib.Path.home().joinpath(".local", "share", "agentic-shell", "exit_requested").touch()
         raise SystemExit(0)
 
     if cmd == "/model":

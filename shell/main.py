@@ -88,9 +88,9 @@ def main() -> None:
     from shell import loop  # lazy import to avoid circular imports
 
     try:
-        loop.start(config, session_id)
+        loop.start(config, session_id, session_context=ctx if ctx else "")
     except KeyboardInterrupt:
-        console.print("\nbye")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

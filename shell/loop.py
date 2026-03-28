@@ -109,7 +109,7 @@ def _get_os_info() -> str:
         return "Linux"
 
 
-async def _call_llm(backend, user_input: str, cwd: str, config: ShellConfig):
+async def _call_llm(backend, user_input: str, cwd: str, config: ShellConfig, session_context: str = ""):
     """Call the LLM backend and return an LLMResponse, handling offline fallback."""
     import httpx
     from shell.llm.base import build_system_prompt
@@ -128,7 +128,11 @@ async def _call_llm(backend, user_input: str, cwd: str, config: ShellConfig):
         if count:
             console.print(f"[dim]⚑ redacted {count} secret pattern(s) before sending to model[/dim]")
 
-    messages = [{"role": "user", "content": nl_input}]
+    messages = []
+    if session_context:
+        messages.append({"role": "user", "content": f"[Previous session context]\n{session_context}"})
+        messages.append({"role": "assistant", "content": "Understood, I have the context from your previous session."})
+    messages.append({"role": "user", "content": nl_input})
 
     try:
         response = await backend.complete(messages, system)
@@ -435,7 +439,7 @@ def _start_new_session() -> None:
         console.print(f"[red]Failed to create new session: {exc}[/red]")
 
 
-def start(config: ShellConfig, session_id: str) -> None:
+def start(config: ShellConfig, session_id: str, session_context: str = "") -> None:
     """Start the interactive shell loop.
 
     Args:
@@ -532,7 +536,11 @@ def start(config: ShellConfig, session_id: str) -> None:
             continue
 
         # --- Agentic path: call LLM ---
-        response = asyncio.run(_call_llm(backend, line, cwd, config))
+        try:
+            response = asyncio.run(_call_llm(backend, line, cwd, config, session_context))
+        except KeyboardInterrupt:
+            console.print("[yellow]cancelled[/yellow]")
+            continue
 
         if response is None:
             # Offline fallback: run input directly as bash

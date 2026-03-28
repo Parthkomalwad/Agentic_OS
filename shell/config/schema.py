@@ -60,7 +60,7 @@ class ShellConfig:
         if not model:
             raise ValueError("model must be a non-empty string")
 
-        return ShellConfig(
+        cfg = ShellConfig(
             backend=backend,
             model=model,
             api_base=data.get("api_base") or None,
@@ -70,6 +70,9 @@ class ShellConfig:
             privacy_mode=bool(data.get("privacy_mode", False)),
             setup_complete=bool(data.get("setup_complete", False)),
         )
+        if data.get("api_key"):
+            cfg.api_key = data["api_key"]  # type: ignore[attr-defined]
+        return cfg
 
     def to_dict(self) -> dict:
         """Serialize config to a JSON-safe dict."""
@@ -82,4 +85,5 @@ class ShellConfig:
             "session_token_budget": self.session_token_budget,
             "privacy_mode": self.privacy_mode,
             "setup_complete": self.setup_complete,
+            "api_key": getattr(self, "api_key", ""),
         }

@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-console = Console(force_terminal=True, file=sys.stdout)
+console = Console(force_terminal=True, file=sys.stdout, width=40)
 _start_time = datetime.now()
 
 def _uptime():
@@ -53,7 +53,7 @@ def _last_command(db):
 
 def _current_dir():
     try:
-        result = subprocess.run(["tmux","display-message","-p","#{pane_current_path}"], capture_output=True, text=True)
+        result = subprocess.run(["tmux","display-message","-t","0.0","-p","#{pane_current_path}"], capture_output=True, text=True)
         path = result.stdout.strip()
         if path:
             home = os.path.expanduser("~")
@@ -62,10 +62,22 @@ def _current_dir():
     except: pass
     return os.getcwd()
 
+def _get_config_model():
+    try:
+        import json
+        from pathlib import Path
+        cfg = json.loads((Path.home() / ".config/agentic-shell/config.json").read_text())
+        return cfg.get("model", "unknown")
+    except:
+        return "unknown"
+
+
 def _render_panel(db):
     today = db.get_today_stats()
     stats = db.get_stats(days=7)
     model = db.get_last_model()
+    if model == "unknown":
+        model = _get_config_model()
     content = Text()
     content.append("Model  ", style="dim"); content.append(model+"\n", style="bold magenta")
     content.append("Uptime ", style="dim"); content.append(_uptime()+"\n", style="cyan")

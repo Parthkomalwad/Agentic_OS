@@ -1,0 +1,13 @@
+# Agentic Shell Layer — pinned dependencies
+# All MIT licensed. No LLM gateways (LiteLLM, LangChain excluded permanently).
+
+prompt_toolkit>=3.0.43
+pygments>=2.17
+ptyprocess>=0.7.0
+httpx>=0.27
+httpx-sse>=0.4
+rich>=13.7
+tiktoken==0.9.0
+libtmux>=0.55,<0.56
+token-reducer>=0.2.0
+secretstorage>=3.3        # Phase 2 only; Linux keyring integration

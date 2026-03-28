@@ -1,0 +1,6 @@
+# Normalize line endings
+* text=auto
+
+# Shell scripts must use LF on checkout
+*.sh text eol=lf
+*.py text eol=lf

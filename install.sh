@@ -44,11 +44,13 @@ STAMP_FILE="\$HOME/.local/share/agentic-shell/install_stamp"
 CURRENT_STAMP="$INSTALL_DIR:$VENV_DIR"
 
 if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
-    # Always kill any existing session — ensures exactly 2 panes, no leftovers
-    tmux kill-session -t "\$SESSION" 2>/dev/null || true
-    echo "\$CURRENT_STAMP" > "\$STAMP_FILE"
+    if tmux has-session -t "\$SESSION" 2>/dev/null; then
+        # Session exists — just reattach (second SSH connection, don't kill it)
+        exec tmux attach-session -t "\$SESSION"
+    fi
 
-    # Create fresh session: pane 0 = shell (left), pane 1 = telemetry (right, 48 cols)
+    # No existing session — create fresh with 2 panes
+    echo "\$CURRENT_STAMP" > "\$STAMP_FILE"
     tmux new-session -d -s "\$SESSION" -x 220 -y 50
     tmux split-window -h -t "\$SESSION":0.0 -l 48
     tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1

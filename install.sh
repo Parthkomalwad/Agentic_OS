@@ -56,11 +56,11 @@ if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
     else
         # Create session: pane 0 = shell (left), pane 1 = telemetry (right, 45 cols)
         tmux new-session -d -s "\$SESSION" -x 220 -y 50
-        tmux split-window -h -t "\$SESSION":0.0 -l 45
+        tmux split-window -h -t "\$SESSION":0.0 -l 48
         tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1
 
         # Telemetry sidebar (right pane)
-        tmux send-keys -t "\$SESSION":0.1 "trap '' INT; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
+        tmux send-keys -t "\$SESSION":0.1 "trap '' INT; clear; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
 
         # Main shell (left pane)
         tmux send-keys -t "\$SESSION":0.0 "trap '' INT; EXIT_FLAG=\$HOME/.local/share/agentic-shell/exit_requested; while true; do rm -f \"\$EXIT_FLAG\"; clear; PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; if [ -f \"\$EXIT_FLAG\" ]; then rm -f \"\$EXIT_FLAG\"; break; fi; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter

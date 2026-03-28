@@ -467,7 +467,7 @@ def _start_new_session() -> None:
         subprocess.run(["tmux", "new-session", "-d", "-s", new_name, "-x", "220", "-y", "50"], check=True)
 
         # Pane 0 = shell (left), split right for telemetry (pane 1, 45 cols)
-        subprocess.run(["tmux", "split-window", "-h", "-t", f"{new_name}:0.0", "-l", "45"], check=True)
+        subprocess.run(["tmux", "split-window", "-h", "-t", f"{new_name}:0.0", "-l", "48"], check=True)
         subprocess.run(["tmux", "swap-pane", "-s", f"{new_name}:0.0", "-t", f"{new_name}:0.1"], check=True)
 
         # Telemetry in pane 1 (right after swap)

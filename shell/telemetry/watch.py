@@ -6,9 +6,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich.columns import Columns
 
-console = Console(force_terminal=True, file=sys.stdout, width=40)
+console = Console(force_terminal=True, file=sys.stdout, width=44)
 _start_time = datetime.now()
+
+# ── helpers ──────────────────────────────────────────────
 
 def _uptime():
     delta = datetime.now() - _start_time
@@ -39,26 +42,39 @@ def _mem_usage():
                 info[k.strip()] = int(v.strip().split()[0])
         total, avail = info["MemTotal"], info["MemAvailable"]
         used = total - avail
-        return f"{used//1024}MB/{total//1024}MB ({100*used//total}%)"
-    except: return "n/a"
+        pct = 100 * used // total
+        color = "color(203)" if pct > 85 else "color(221)" if pct > 65 else "color(114)"
+        return f"{used//1024}MB/{total//1024}MB ({pct}%)", color
+    except: return "n/a", "color(114)"
+
+def _cpu_color(val: str) -> str:
+    try:
+        n = int(val.rstrip("%"))
+        return "color(203)" if n > 85 else "color(221)" if n > 65 else "color(114)"
+    except: return "color(114)"
 
 def _last_command(db):
     try:
-        row = db._conn.execute("SELECT command FROM token_events WHERE command IS NOT NULL ORDER BY id DESC LIMIT 1").fetchone()
+        row = db._conn.execute(
+            "SELECT command FROM token_events WHERE command IS NOT NULL ORDER BY id DESC LIMIT 1"
+        ).fetchone()
         if row and row[0]:
             cmd = row[0]
-            return cmd[:28]+"..." if len(cmd)>28 else cmd
-        return "none"
+            return cmd[:30] + "…" if len(cmd) > 30 else cmd
+        return "—"
     except: return "n/a"
 
 def _current_dir():
     try:
-        result = subprocess.run(["tmux","display-message","-t","0.0","-p","#{pane_current_path}"], capture_output=True, text=True)
+        result = subprocess.run(
+            ["tmux", "display-message", "-t", "0.0", "-p", "#{pane_current_path}"],
+            capture_output=True, text=True, timeout=1
+        )
         path = result.stdout.strip()
         if path:
             home = os.path.expanduser("~")
-            if path.startswith(home): path = "~"+path[len(home):]
-            return path[-26:] if len(path)>26 else path
+            if path.startswith(home): path = "~" + path[len(home):]
+            return path[-28:] if len(path) > 28 else path
     except: pass
     return os.getcwd()
 
@@ -68,54 +84,181 @@ def _get_config_model():
         from pathlib import Path
         cfg = json.loads((Path.home() / ".config/agentic-shell/config.json").read_text())
         return cfg.get("model", "unknown")
-    except:
-        return "unknown"
+    except: return "unknown"
 
+def _git_status():
+    """Return (branch, changes_summary) or None if not a git repo."""
+    try:
+        cwd = _current_dir().replace("~", os.path.expanduser("~"))
+        branch = subprocess.run(
+            ["git", "-C", cwd, "branch", "--show-current"],
+            capture_output=True, text=True, timeout=1
+        ).stdout.strip()
+        if not branch:
+            return None
+        status = subprocess.run(
+            ["git", "-C", cwd, "status", "--porcelain"],
+            capture_output=True, text=True, timeout=1
+        ).stdout.strip()
+        modified = sum(1 for l in status.splitlines() if l and l[1] in "MD ")
+        staged   = sum(1 for l in status.splitlines() if l and l[0] in "MADR")
+        untracked= sum(1 for l in status.splitlines() if l.startswith("??"))
+        return branch, staged, modified, untracked
+    except: return None
 
-def _render_panel(db):
+def _top_procs():
+    """Return list of (pid, cpu%, mem%, name) for top 3 CPU consumers."""
+    try:
+        out = subprocess.run(
+            ["ps", "aux", "--sort=-%cpu"],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip().splitlines()
+        rows = []
+        for line in out[1:6]:
+            parts = line.split(None, 10)
+            if len(parts) >= 11:
+                name = parts[10].split("/")[-1][:16]
+                rows.append((parts[1], parts[2], parts[3], name))
+        return rows[:4]
+    except: return []
+
+def _network_ip():
+    """Return primary non-loopback IP."""
+    try:
+        out = subprocess.run(
+            ["hostname", "-I"], capture_output=True, text=True, timeout=1
+        ).stdout.strip()
+        ips = [ip for ip in out.split() if not ip.startswith("127.")]
+        return ips[0] if ips else "—"
+    except: return "—"
+
+def _disk_usage():
+    """Return (used, total, pct) for root filesystem."""
+    try:
+        out = subprocess.run(
+            ["df", "-h", "/"], capture_output=True, text=True, timeout=1
+        ).stdout.strip().splitlines()
+        if len(out) >= 2:
+            parts = out[1].split()
+            return parts[2], parts[1], parts[4]   # used, total, pct
+    except: pass
+    return "n/a", "n/a", "n/a"
+
+# ── panel builders ────────────────────────────────────────
+
+def _panel_session(db, model):
+    t = Text()
+    t.append("Model  ", style="color(238)"); t.append(model + "\n", style="color(141) bold")
+    t.append("Uptime ", style="color(238)"); t.append(_uptime() + "\n", style="color(153)")
+    t.append("CWD    ", style="color(238)"); t.append(_current_dir() + "\n", style="color(153)")
+    t.append("Last   ", style="color(238)"); t.append(_last_command(db) + "\n", style="color(250)")
+    return Panel(t, title="[color(141) bold]✦ session[/color(141) bold]", border_style="color(55)", padding=(0, 1))
+
+def _panel_system():
+    cpu = _cpu_usage()
+    mem, mem_color = _mem_usage()
+    used, total, pct = _disk_usage()
+    ip = _network_ip()
+    t = Text()
+    t.append("CPU    ", style="color(238)"); t.append(cpu + "\n", style=_cpu_color(cpu))
+    t.append("RAM    ", style="color(238)"); t.append(mem + "\n", style=mem_color)
+    t.append("Disk   ", style="color(238)"); t.append(f"{used}/{total} ({pct})\n", style="color(153)")
+    t.append("IP     ", style="color(238)"); t.append(ip + "\n", style="color(153)")
+    return Panel(t, title="[color(141) bold]⬡ system[/color(141) bold]", border_style="color(55)", padding=(0, 1))
+
+def _panel_git():
+    result = _git_status()
+    t = Text()
+    if result is None:
+        t.append("not a git repo\n", style="color(238)")
+    else:
+        branch, staged, modified, untracked = result
+        t.append("Branch  ", style="color(238)"); t.append(branch + "\n", style="color(141) bold")
+        staged_color   = "color(114)" if staged == 0 else "color(221)"
+        modified_color = "color(114)" if modified == 0 else "color(203)"
+        untracked_color= "color(114)" if untracked == 0 else "color(238)"
+        t.append("Staged  ", style="color(238)"); t.append(f"{staged} file(s)\n", style=staged_color)
+        t.append("Changed ", style="color(238)"); t.append(f"{modified} file(s)\n", style=modified_color)
+        t.append("New     ", style="color(238)"); t.append(f"{untracked} file(s)\n", style=untracked_color)
+    return Panel(t, title="[color(141) bold] git[/color(141) bold]", border_style="color(55)", padding=(0, 1))
+
+def _panel_processes():
+    procs = _top_procs()
+    t = Text()
+    t.append(f"{'NAME':<16} {'CPU':>4} {'MEM':>4}\n", style="color(141)")
+    for pid, cpu, mem, name in procs:
+        cpu_color = "color(203)" if float(cpu) > 50 else "color(221)" if float(cpu) > 20 else "color(114)"
+        t.append(f"{name:<16} ", style="color(250)")
+        t.append(f"{cpu:>4}", style=cpu_color)
+        t.append(f" {mem:>4}\n", style="color(153)")
+    return Panel(t, title="[color(141) bold]⚙ processes[/color(141) bold]", border_style="color(55)", padding=(0, 1))
+
+def _panel_tokens(db):
     today = db.get_today_stats()
     stats = db.get_stats(days=7)
-    model = db.get_last_model()
-    if model == "unknown":
-        model = _get_config_model()
-    content = Text()
-    # Theme: soft purple accent (#875fd7 = color 98), dim labels, green for money
-    content.append("Model  ", style="color(238)"); content.append(model+"\n", style="color(141) bold")
-    content.append("Uptime ", style="color(238)"); content.append(_uptime()+"\n", style="color(153)")
-    content.append("CWD    ", style="color(238)"); content.append(_current_dir()+"\n", style="color(153)")
-    content.append("Last   ", style="color(238)"); content.append(_last_command(db)+"\n", style="color(250)")
-    content.append("\nSystem\n", style="color(141) bold")
-    content.append("  CPU  ", style="color(238)"); content.append(_cpu_usage()+"\n", style="color(114)")
-    content.append("  RAM  ", style="color(238)"); content.append(_mem_usage()+"\n", style="color(114)")
-    content.append("\nToday\n", style="color(141) bold")
-    content.append("  Cost     ", style="color(238)"); content.append(f"${today['cost']:.4f}\n", style="color(114) bold")
-    content.append("  Tokens   ", style="color(238)"); content.append(f"{today['tokens']:,}\n", style="color(153)")
-    content.append("  Calls    ", style="color(238)"); content.append(f"{today['calls']}\n", style="color(250)")
-    if today["calls"]>0:
-        content.append("  Avg/call ", style="color(238)"); content.append(f"${today['cost']/today['calls']:.4f}\n", style="color(114)")
-    content.append("\n")
-    table = Table(show_header=True, header_style="color(141)", box=None, padding=(0,1))
-    table.add_column("Date", style="color(238)", width=11)
+    t = Text()
+    t.append("Cost     ", style="color(238)"); t.append(f"${today['cost']:.4f}\n", style="color(114) bold")
+    t.append("Tokens   ", style="color(238)"); t.append(f"{today['tokens']:,}\n", style="color(153)")
+    t.append("Calls    ", style="color(238)"); t.append(f"{today['calls']}\n", style="color(250)")
+    if today["calls"] > 0:
+        t.append("Avg/call ", style="color(238)"); t.append(f"${today['cost']/today['calls']:.4f}\n", style="color(114)")
+    t.append("\n")
+    table = Table(show_header=True, header_style="color(141)", box=None, padding=(0, 1))
+    table.add_column("Date",  style="color(238)", width=11)
     table.add_column("Calls", justify="right", width=5, style="color(250)")
-    table.add_column("Cost", justify="right", width=8, style="color(114)")
-    for row in stats[:7]:
+    table.add_column("Cost",  justify="right", width=8, style="color(114)")
+    for row in stats[:5]:
         table.add_row(row["day"], str(row["calls"]), f"${row['cost']:.4f}" if row["cost"] else "$0.0000")
     from io import StringIO
     buf = StringIO()
-    Console(file=buf, force_terminal=False, width=38).print(table)
-    content.append(buf.getvalue())
-    return Panel(content, title="[color(141) bold]✦ agentic[/color(141) bold]", border_style="color(55)")
+    Console(file=buf, force_terminal=False, width=40).print(table)
+    t.append(buf.getvalue())
+    return Panel(t, title="[color(141) bold]◈ tokens[/color(141) bold]", border_style="color(55)", padding=(0, 1))
+
+def _panel_shortcuts():
+    t = Text()
+    shortcuts = [
+        ("/help",    "show all commands"),
+        ("/new",     "new tmux session"),
+        ("/config",  "edit settings"),
+        ("/model",   "show model"),
+        ("/stats",   "token usage"),
+        ("/memory",  "session context"),
+        ("Ctrl+B",   "force bash mode"),
+        ("Ctrl+T",   "toggle sidebar"),
+        ("/exit",    "quit shell"),
+    ]
+    for key, desc in shortcuts:
+        t.append(f"{key:<10}", style="color(141)")
+        t.append(f" {desc}\n", style="color(238)")
+    return Panel(t, title="[color(141) bold]? shortcuts[/color(141) bold]", border_style="color(55)", padding=(0, 1))
+
+# ── main render loop ──────────────────────────────────────
 
 def run():
     from shell.telemetry.db import Database
     db = Database()
+    model = "unknown"
     try:
         while True:
+            m = db.get_last_model()
+            if m != "unknown":
+                model = m
+            elif model == "unknown":
+                model = _get_config_model()
+
             console.clear()
-            console.print(_render_panel(db))
-            time.sleep(2)
-    except KeyboardInterrupt: pass
-    finally: db.close()
+            console.print(_panel_session(db, model))
+            console.print(_panel_system())
+            console.print(_panel_git())
+            console.print(_panel_processes())
+            console.print(_panel_tokens(db))
+            console.print(_panel_shortcuts())
+            time.sleep(3)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     run()

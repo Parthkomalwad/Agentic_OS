@@ -17,7 +17,7 @@ from collections import Counter
 
 DESTRUCTIVE_PATTERNS: list[str] = [
     r"\brm\s+(-[^\s]*f[^\s]*\s+|--force\s+)",
-    r"\bdd\b",
+    r"\bdd\s+if=",
     r"\bchmod\s+777\b",
     r"\bkill\s+-9\b",
     r"\bcurl\b.*\|\s*(bash|sh)\b",

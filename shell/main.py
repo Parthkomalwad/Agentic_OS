@@ -79,6 +79,11 @@ def main() -> None:
 
     from shell import loop  # lazy import to avoid circular imports
 
+    # Welcome banner
+    sys.stdout.write("\n\033[38;5;141m  ✦ Agentic Shell\033[0m\n")
+    sys.stdout.write(f"\033[2;37m  {config.backend} · {config.model}  |  type naturally or use bash directly\033[0m\n\n")
+    sys.stdout.flush()
+
     try:
         loop.start(config, session_id, session_context=ctx if ctx else "")
     except KeyboardInterrupt:

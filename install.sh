@@ -52,6 +52,9 @@ if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
     # No existing session — create fresh with 2 panes
     echo "\$CURRENT_STAMP" > "\$STAMP_FILE"
     tmux new-session -d -s "\$SESSION" -x 220 -y 50
+    # Enable mouse scrolling + large scrollback buffer
+    tmux set-option -t "\$SESSION" mouse on
+    tmux set-option -t "\$SESSION" history-limit 50000
     tmux split-window -h -t "\$SESSION":0.0 -l 48
     tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1
 
@@ -68,6 +71,16 @@ else
 fi
 EOF
 sudo chmod +x "$WRAPPER"
+
+echo "==> Writing ~/.tmux.conf (mouse scroll + large history)"
+sudo -u "$REAL_USER" bash -c "cat > $REAL_HOME/.tmux.conf" <<'TMUX_EOF'
+set -g mouse on
+set -g history-limit 50000
+set -g default-terminal "xterm-256color"
+# Scroll with mouse wheel; click to select pane
+bind -n WheelUpPane   if-shell -F "#{?pane_in_mode,1,#{?alternate_screen,1,0}}" "send-keys -M" "copy-mode -e; send-keys -M"
+bind -n WheelDownPane if-shell -F "#{?pane_in_mode,1,#{?alternate_screen,1,0}}" "send-keys -M" "send-keys -M"
+TMUX_EOF
 
 echo "==> Creating audit log directory"
 sudo mkdir -p "$AUDIT_LOG_DIR"

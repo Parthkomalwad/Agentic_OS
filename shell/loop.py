@@ -13,7 +13,8 @@ os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.formatted_text import HTML, ANSI
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding import KeyBindings, merge_key_bindings
+from prompt_toolkit.key_binding.bindings.emacs import load_emacs_bindings
 from prompt_toolkit.completion import Completer, Completion, PathCompleter, merge_completers
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 
@@ -615,7 +616,7 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
     os.environ.setdefault("PROMPT_TOOLKIT_NO_CPR", "1")
     session = PromptSession(
         history=FileHistory(str(history_file)),
-        key_bindings=kb,
+        key_bindings=merge_key_bindings([load_emacs_bindings(), kb]),
         completer=_ShellCompleter(),
         complete_while_typing=False,
         auto_suggest=AutoSuggestFromHistory(),

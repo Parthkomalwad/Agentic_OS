@@ -44,30 +44,23 @@ STAMP_FILE="\$HOME/.local/share/agentic-shell/install_stamp"
 CURRENT_STAMP="$INSTALL_DIR:$VENV_DIR"
 
 if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
-    # Kill existing session if install dir has changed
-    SAVED_STAMP="\$(cat "\$STAMP_FILE" 2>/dev/null || echo '')"
-    if tmux has-session -t "\$SESSION" 2>/dev/null && [ "\$SAVED_STAMP" != "\$CURRENT_STAMP" ]; then
-        tmux kill-session -t "\$SESSION" 2>/dev/null || true
-    fi
+    # Always kill any existing session — ensures exactly 2 panes, no leftovers
+    tmux kill-session -t "\$SESSION" 2>/dev/null || true
     echo "\$CURRENT_STAMP" > "\$STAMP_FILE"
 
-    if tmux has-session -t "\$SESSION" 2>/dev/null; then
-        exec tmux attach-session -t "\$SESSION"
-    else
-        # Create session: pane 0 = shell (left), pane 1 = telemetry (right, 45 cols)
-        tmux new-session -d -s "\$SESSION" -x 220 -y 50
-        tmux split-window -h -t "\$SESSION":0.0 -l 48
-        tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1
+    # Create fresh session: pane 0 = shell (left), pane 1 = telemetry (right, 48 cols)
+    tmux new-session -d -s "\$SESSION" -x 220 -y 50
+    tmux split-window -h -t "\$SESSION":0.0 -l 48
+    tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1
 
-        # Telemetry sidebar (right pane)
-        tmux send-keys -t "\$SESSION":0.1 "trap '' INT; clear; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
+    # Telemetry sidebar (right pane)
+    tmux send-keys -t "\$SESSION":0.1 "trap '' INT; clear; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
 
-        # Main shell (left pane)
-        tmux send-keys -t "\$SESSION":0.0 "trap '' INT; EXIT_FLAG=\$HOME/.local/share/agentic-shell/exit_requested; while true; do rm -f \"\$EXIT_FLAG\"; clear; PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; if [ -f \"\$EXIT_FLAG\" ]; then rm -f \"\$EXIT_FLAG\"; break; fi; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
+    # Main shell (left pane)
+    tmux send-keys -t "\$SESSION":0.0 "trap '' INT; EXIT_FLAG=\$HOME/.local/share/agentic-shell/exit_requested; while true; do rm -f \"\$EXIT_FLAG\"; clear; PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; if [ -f \"\$EXIT_FLAG\" ]; then rm -f \"\$EXIT_FLAG\"; break; fi; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
 
-        tmux select-pane -t "\$SESSION":0.0
-        exec tmux attach-session -t "\$SESSION"
-    fi
+    tmux select-pane -t "\$SESSION":0.0
+    exec tmux attach-session -t "\$SESSION"
 else
     exec "\$PYTHON" -m shell.main
 fi

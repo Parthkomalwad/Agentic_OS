@@ -2,24 +2,34 @@
 set -euo pipefail
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VENV_DIR="$HOME/.local/share/agentic-shell/venv"
+
+# If run via sudo, use the real user's home — not root's
+if [ -n "${SUDO_USER:-}" ]; then
+    REAL_USER="$SUDO_USER"
+    REAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+else
+    REAL_USER="$(whoami)"
+    REAL_HOME="$HOME"
+fi
+
+VENV_DIR="$REAL_HOME/.local/share/agentic-shell/venv"
 WRAPPER="/usr/local/bin/agentic-shell"
 AUDIT_LOG_DIR="/var/log/agentic-shell"
-CURRENT_USER="$(whoami)"
 
-echo "==> Installing agentic-shell for user: $CURRENT_USER"
+echo "==> Installing agentic-shell for user: $REAL_USER"
 echo "    Install dir: $INSTALL_DIR"
+echo "    Venv dir:    $VENV_DIR"
 
 echo "==> Creating virtualenv at $VENV_DIR"
-mkdir -p "$(dirname "$VENV_DIR")"
-python3 -m venv "$VENV_DIR"
+sudo -u "$REAL_USER" mkdir -p "$(dirname "$VENV_DIR")"
+sudo -u "$REAL_USER" python3 -m venv "$VENV_DIR"
 
 echo "==> Installing Python dependencies"
-"$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+sudo -u "$REAL_USER" "$VENV_DIR/bin/pip" install --quiet --upgrade pip
+sudo -u "$REAL_USER" "$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
 
 echo "==> Pre-caching tiktoken encodings"
-"$VENV_DIR/bin/python" -c "import tiktoken; tiktoken.get_encoding('cl100k_base')" || true
+sudo -u "$REAL_USER" "$VENV_DIR/bin/python" -c "import tiktoken; tiktoken.get_encoding('cl100k_base')" || true
 
 echo "==> Writing wrapper to $WRAPPER"
 sudo tee "$WRAPPER" > /dev/null <<EOF
@@ -44,15 +54,15 @@ if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
     if tmux has-session -t "\$SESSION" 2>/dev/null; then
         exec tmux attach-session -t "\$SESSION"
     else
-        # Create session: pane 0 = main shell (left), pane 1 = telemetry (right, 45 cols)
+        # Create session: pane 0 = shell (left), pane 1 = telemetry (right, 45 cols)
         tmux new-session -d -s "\$SESSION" -x 220 -y 50
         tmux split-window -h -t "\$SESSION":0.0 -l 45
         tmux swap-pane -s "\$SESSION":0.0 -t "\$SESSION":0.1
 
-        # Telemetry sidebar (pane 1) — trap INT so Ctrl+C doesn't kill the loop
+        # Telemetry sidebar (right pane)
         tmux send-keys -t "\$SESSION":0.1 "trap '' INT; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
 
-        # Main shell (pane 0) — trap INT so Ctrl+C goes to shell.main not the loop
+        # Main shell (left pane)
         tmux send-keys -t "\$SESSION":0.0 "trap '' INT; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
 
         tmux select-pane -t "\$SESSION":0.0
@@ -75,8 +85,10 @@ if ! grep -q "$WRAPPER" /etc/shells; then
     echo "$WRAPPER" | sudo tee -a /etc/shells > /dev/null
 fi
 
-echo "==> Setting login shell to $WRAPPER for $CURRENT_USER"
-chsh -s "$WRAPPER" "$CURRENT_USER"
+echo "==> Setting login shell to $WRAPPER for $REAL_USER"
+sudo chsh -s "$WRAPPER" "$REAL_USER"
 
 echo ""
-echo "✓ agentic-shell installed successfully."
+echo "✓ agentic-shell installed successfully for $REAL_USER."
+echo "  Venv: $VENV_DIR"
+echo "  Run: agentic-shell"

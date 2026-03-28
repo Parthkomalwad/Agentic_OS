@@ -79,7 +79,7 @@ def render_settings_panel(config: object) -> object | None:
     from prompt_toolkit.formatted_text import HTML
     from rich.console import Console as RichConsole
 
-    rc = RichConsole()
+    rc = RichConsole(force_terminal=True, width=120)
 
     rc.print()
     rc.print(Panel(

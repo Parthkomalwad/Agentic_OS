@@ -19,7 +19,7 @@ from rich.panel import Panel
 
 from shell.config.schema import ShellConfig
 
-console = Console()
+console = Console(force_terminal=True, width=120)
 
 CONFIG_PATH = Path.home() / ".config" / "agentic-shell" / "config.json"
 

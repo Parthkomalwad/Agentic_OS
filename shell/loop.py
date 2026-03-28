@@ -19,6 +19,8 @@ import platform
 import sys
 from pathlib import Path
 
+os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
+
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.formatted_text import HTML
@@ -273,6 +275,31 @@ def _handle_builtin(line: str, db, session_id: str, config: ShellConfig) -> bool
         console.print(_HELP_TEXT)
         return True
 
+    if cmd == "/clear":
+        os.system("clear")
+        return True
+
+    if cmd in ("/exit", "/quit"):
+        raise SystemExit(0)
+
+    if cmd == "/model":
+        console.print(f"[dim]backend:[/dim] [bold]{config.backend}[/bold]  [dim]model:[/dim] [bold magenta]{config.model}[/bold magenta]")
+        return True
+
+    if cmd == "/mode":
+        current = getattr(config, "routing_mode", "auto")
+        new_mode = "prefix" if current == "auto" else "auto"
+        config.routing_mode = new_mode
+        if new_mode == "prefix":
+            console.print("[cyan]Routing mode: prefix[/cyan] — prefix your request with [bold]>>[/bold] to send to LLM")
+        else:
+            console.print("[cyan]Routing mode: auto[/cyan] — shell auto-detects bash vs natural language")
+        return True
+
+    if cmd == "/new":
+        _start_new_session()
+        return True
+
     if cmd in ("/config", "Ctrl+X"):
         try:
             from shell.tui.panel import render_settings_panel
@@ -302,80 +329,7 @@ def _handle_builtin(line: str, db, session_id: str, config: ShellConfig) -> bool
         _show_memory(session_id)
         return True
 
-    if cmd == "/clear":
-        os.system("clear")
-        return True
-
-    if cmd in ("/exit", "/quit"):
-        raise SystemExit(0)
-
-    if cmd == "/model":
-        console.print(f"[dim]backend:[/dim] [bold]{config.backend}[/bold]  [dim]model:[/dim] [bold magenta]{config.model}[/bold magenta]")
-        return True
-
-    if cmd == "/mode":
-        current = getattr(config, "routing_mode", "auto")
-        new_mode = "prefix" if current == "auto" else "auto"
-        config.routing_mode = new_mode
-        if new_mode == "prefix":
-            console.print("[cyan]Routing mode: prefix[/cyan] — prefix your request with [bold]>>[/bold] to send to LLM")
-        else:
-            console.print("[cyan]Routing mode: auto[/cyan] — shell auto-detects bash vs natural language")
-        return True
-
-    if cmd == "/new":
-        _start_new_session()
-        return True
-
     return False
-
-
-def _start_new_session() -> None:
-    """Kill current tmux session and exec a fresh agentic-shell."""
-    import subprocess
-    import shutil
-
-    # Check if we're inside tmux
-    tmux_session = os.environ.get("TMUX_PANE") or os.environ.get("TMUX")
-    if not tmux_session or not shutil.which("tmux"):
-        console.print("[yellow]Not inside tmux — restarting shell process.[/yellow]")
-        # Re-exec the current process (fresh start without tmux)
-        python = sys.executable
-        os.execv(python, [python, "-m", "shell.main"])
-        return
-
-    console.print("[dim]Starting new session...[/dim]")
-    # Get current session name
-    try:
-        result = subprocess.run(
-            ["tmux", "display-message", "-p", "#S"],
-            capture_output=True, text=True
-        )
-        current_session = result.stdout.strip()
-    except Exception:
-        current_session = ""
-
-    # Create a new uniquely named session and switch to it
-    import time
-    new_name = f"agentic-{int(time.time()) % 10000}"
-    try:
-        # Create new session detached
-        subprocess.run(
-            ["tmux", "new-session", "-d", "-s", new_name, "-x", "220", "-y", "50"],
-            check=True
-        )
-        # Send the shell startup command to it
-        subprocess.run(
-            ["tmux", "send-keys", "-t", new_name, "agentic-shell", "Enter"],
-            check=True
-        )
-        # Switch client to new session
-        subprocess.run(["tmux", "switch-client", "-t", new_name], check=True)
-        # Kill old session after switching
-        if current_session and current_session != new_name:
-            subprocess.run(["tmux", "kill-session", "-t", current_session])
-    except Exception as exc:
-        console.print(f"[red]Failed to create new session: {exc}[/red]")
 
 
 def _show_stats(db) -> None:
@@ -453,6 +407,39 @@ def _show_memory(session_id: str) -> None:
         pass
 
 
+def _start_new_session() -> None:
+    """Kill current tmux session and start a fresh agentic-shell."""
+    import subprocess
+    import shutil
+    import time
+
+    tmux_pane = os.environ.get("TMUX_PANE") or os.environ.get("TMUX")
+    if not tmux_pane or not shutil.which("tmux"):
+        console.print("[yellow]Not inside tmux — restarting shell process.[/yellow]")
+        os.execv(sys.executable, [sys.executable, "-m", "shell.main"])
+        return
+
+    console.print("[dim]Starting new session...[/dim]")
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "#S"],
+            capture_output=True, text=True
+        )
+        current_session = result.stdout.strip()
+    except Exception:
+        current_session = ""
+
+    new_name = f"agentic-{int(time.time()) % 10000}"
+    try:
+        subprocess.run(["tmux", "new-session", "-d", "-s", new_name, "-x", "220", "-y", "50"], check=True)
+        subprocess.run(["tmux", "send-keys", "-t", new_name, "agentic-shell", "Enter"], check=True)
+        subprocess.run(["tmux", "switch-client", "-t", new_name], check=True)
+        if current_session and current_session != new_name:
+            subprocess.run(["tmux", "kill-session", "-t", current_session])
+    except Exception as exc:
+        console.print(f"[red]Failed to create new session: {exc}[/red]")
+
+
 def start(config: ShellConfig, session_id: str) -> None:
     """Start the interactive shell loop.
 
@@ -488,7 +475,8 @@ def start(config: ShellConfig, session_id: str) -> None:
         try:
             cwd = os.getcwd()
             user_input = session.prompt(
-                HTML(f'<ansigreen>{cwd}</ansigreen> <ansicyan>❯</ansicyan> ')
+                HTML(f'<ansigreen>{cwd}</ansigreen> <ansicyan>❯</ansicyan> '),
+                in_thread=True
             )
         except EOFError:
             break

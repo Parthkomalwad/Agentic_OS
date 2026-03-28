@@ -5,6 +5,7 @@ import asyncio
 import os
 import platform
 import sys
+import threading
 from pathlib import Path
 
 os.environ["PROMPT_TOOLKIT_NO_CPR"] = "1"
@@ -65,10 +66,39 @@ def _out(text: str) -> None:
     sys.stdout.flush()
 
 
-def _write_thinking() -> None:
-    """Print ✦ thinking... in soft purple. Caller overwrites with \r after LLM responds."""
-    sys.stdout.write('\033[38;5;141m  ✦ thinking...\033[0m')
-    sys.stdout.flush()
+_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+
+
+class _ThinkingSpinner:
+    """Animated spinner that runs in a background thread during LLM calls."""
+
+    def __init__(self) -> None:
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread:
+            self._thread.join(timeout=1)
+        # Clear the spinner line
+        sys.stdout.write('\r' + ' ' * 30 + '\r')
+        sys.stdout.flush()
+
+    def _run(self) -> None:
+        PURPLE = '\033[38;5;141m'
+        RESET = '\033[0m'
+        i = 0
+        while not self._stop.is_set():
+            frame = _SPINNER_FRAMES[i % len(_SPINNER_FRAMES)]
+            sys.stdout.write(f'\r{PURPLE}  {frame} thinking...{RESET}')
+            sys.stdout.flush()
+            self._stop.wait(0.08)
+            i += 1
 
 
 def _print_exec_result(exit_code: int, elapsed: float, cost_usd: float = 0.0, total_tokens: int = 0) -> None:
@@ -655,14 +685,13 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
                 _out(f"exit {exit_code}")
             continue
 
+        _spinner = _ThinkingSpinner()
+        _spinner.start()
         try:
-            _write_thinking()
             response = asyncio.run(_call_llm(backend, line, cwd, config, session_context))
-            sys.stdout.write('\r' + ' ' * 20 + '\r')
-            sys.stdout.flush()
+            _spinner.stop()
         except KeyboardInterrupt:
-            sys.stdout.write('\r' + ' ' * 20 + '\r')
-            sys.stdout.flush()
+            _spinner.stop()
             _out("cancelled")
             continue
 

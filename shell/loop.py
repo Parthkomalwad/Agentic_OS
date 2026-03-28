@@ -477,7 +477,7 @@ def _start_new_session() -> None:
 
         # Shell in pane 0 (left after swap)
         subprocess.run(["tmux", "send-keys", "-t", f"{new_name}:0.0",
-            f"trap '' INT; while true; do PYTHONPATH={install_dir} PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 {venv_python} -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done",
+            f"trap '' INT; while true; do clear; PYTHONPATH={install_dir} PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 {venv_python} -m shell.main; echo '[shell exited — restarting in 2s]'; sleep 2; done",
             "Enter"], check=True)
 
         subprocess.run(["tmux", "select-pane", "-t", f"{new_name}:0.0"], check=True)

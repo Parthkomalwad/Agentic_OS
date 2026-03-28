@@ -63,7 +63,7 @@ if command -v tmux &>/dev/null && [ -z "\$TMUX" ]; then
         tmux send-keys -t "\$SESSION":0.1 "trap '' INT; while true; do PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 $VENV_DIR/bin/python -m shell.telemetry.watch; sleep 2; done" Enter
 
         # Main shell (left pane)
-        tmux send-keys -t "\$SESSION":0.0 "trap '' INT; EXIT_FLAG=\$HOME/.local/share/agentic-shell/exit_requested; while true; do rm -f \"\$EXIT_FLAG\"; PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; if [ -f \"\$EXIT_FLAG\" ]; then rm -f \"\$EXIT_FLAG\"; break; fi; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
+        tmux send-keys -t "\$SESSION":0.0 "trap '' INT; EXIT_FLAG=\$HOME/.local/share/agentic-shell/exit_requested; while true; do rm -f \"\$EXIT_FLAG\"; clear; PYTHONPATH=$INSTALL_DIR PROMPT_TOOLKIT_NO_CPR=1 NO_TMUX=1 $VENV_DIR/bin/python -m shell.main; if [ -f \"\$EXIT_FLAG\" ]; then rm -f \"\$EXIT_FLAG\"; break; fi; echo '[shell exited — restarting in 2s]'; sleep 2; done" Enter
 
         tmux select-pane -t "\$SESSION":0.0
         exec tmux attach-session -t "\$SESSION"

@@ -655,10 +655,8 @@ def _start_new_session() -> None:
 def _save_turns_if_needed(
     turns: list[dict], session_id: str, config: ShellConfig, force: bool = False
 ) -> None:
-    """Save compressed session context every 5 turns or when forced."""
+    """Save compressed session context after every AI turn."""
     if not turns:
-        return
-    if not force and len(turns) % 5 != 0:
         return
     try:
         from shell.memory.compressor import compress
@@ -704,114 +702,116 @@ def start(config: ShellConfig, session_id: str, session_context: str = "") -> No
     # Track conversation turns for session continuity
     turns: list[dict] = []
 
-    while True:
-        try:
-            cwd = os.getcwd()
-            user_input = session.prompt(
-                ANSI(_render_prompt(cwd, _last_exit)),
-                in_thread=True
-            )
-        except EOFError:
-            _save_turns_if_needed(turns, session_id, config, force=True)
-            break
-
-        line = user_input.strip()
-        if not line:
-            continue
-
-        if _handle_builtin(line, db, session_id, config):
-            continue
-
-        if _bypass_next:
-            _bypass_next = False
-            exit_code, _ = execute_bash(line, cwd)
-            if exit_code != 0:
-                _out(f"exit {exit_code}")
-            continue
-
-        if _offline_mode:
-            exit_code, _ = execute_bash(line, cwd)
-            if exit_code != 0:
-                _out(f"exit {exit_code}")
-            continue
-
-        route = classify(line, mode=config.routing_mode)
-
-        if route == Route.AMBIGUOUS:
+    try:
+        while True:
             try:
-                choice = session.prompt(
-                    HTML("<ansiyellow>[b]ash or [a]gentic? </ansiyellow>")
-                ).strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                choice = "b"
-            route = Route.AGENTIC if choice == "a" else Route.BASH
+                cwd = os.getcwd()
+                user_input = session.prompt(
+                    ANSI(_render_prompt(cwd, _last_exit)),
+                    in_thread=True
+                )
+            except EOFError:
+                break
 
-        if route == Route.BASH:
-            if is_destructive(line):
-                if not confirm_destructive(line):
-                    _audit_log("destructive_blocked", line)
-                    continue
-            exit_code, _ = execute_bash(line, cwd)
-            _last_exit = exit_code
-            _audit_log("bash", line, exit_code)
-            if exit_code != 0:
-                _out(f"exit {exit_code}")
-            continue
-
-        if not _check_and_enforce_budget(db, config, session_id):
-            exit_code, _ = execute_bash(line, cwd)
-            if exit_code != 0:
-                _out(f"exit {exit_code}")
-            continue
-
-        _spinner = _ThinkingSpinner()
-        _spinner.start()
-        try:
-            response = asyncio.run(_call_llm(backend, line, cwd, config, session_context))
-            _spinner.stop()
-        except KeyboardInterrupt:
-            _spinner.stop()
-            _out("cancelled")
-            continue
-
-        if response is None:
-            exit_code, _ = execute_bash(line, cwd)
-            if exit_code != 0:
-                _out(f"exit {exit_code}")
-            continue
-
-        if response.plan:
-            last_exit = execute_plan(response.plan, cwd, description=line)
-            sys.stdout.write(f'  \033[38;5;238m·   ${response.cost_usd:.4f} · {response.prompt_tokens + response.completion_tokens} tok\033[0m\n')
-            sys.stdout.flush()
-            _log_event(db, session_id, response, str(response.plan), last_exit, line)
-            turns.append({"role": "user", "content": line})
-            turns.append({"role": "assistant", "content": f"plan: {response.plan}"})
-            _save_turns_if_needed(turns, session_id, config)
-            continue
-
-        command = _display_command_preview(response)
-        if command is None:
-            continue
-
-        ai_flagged = not response.safe
-        regex_flagged = is_destructive(command)
-        if ai_flagged or regex_flagged:
-            reason = "AI flagged as potentially unsafe" if ai_flagged else "matched destructive pattern"
-            if not confirm_destructive(command, reason=reason):
+            line = user_input.strip()
+            if not line:
                 continue
 
-        import time as _time
-        _t0 = _time.monotonic()
-        exit_code, _ = execute_bash(command, cwd)
-        _elapsed = _time.monotonic() - _t0
-        _last_exit = exit_code
-        _print_exec_result(exit_code, _elapsed, cost_usd=response.cost_usd, total_tokens=response.prompt_tokens + response.completion_tokens)
+            if _handle_builtin(line, db, session_id, config):
+                continue
 
-        _log_event(db, session_id, response, command, exit_code, line)
-        _audit_log("agentic", command, exit_code)
+            if _bypass_next:
+                _bypass_next = False
+                exit_code, _ = execute_bash(line, cwd)
+                if exit_code != 0:
+                    _out(f"exit {exit_code}")
+                continue
 
-        # Track turn for session continuity
-        turns.append({"role": "user", "content": line})
-        turns.append({"role": "assistant", "content": f"command: {command}\nexplanation: {response.explanation}"})
+            if _offline_mode:
+                exit_code, _ = execute_bash(line, cwd)
+                if exit_code != 0:
+                    _out(f"exit {exit_code}")
+                continue
+
+            route = classify(line, mode=config.routing_mode)
+
+            if route == Route.AMBIGUOUS:
+                try:
+                    choice = session.prompt(
+                        HTML("<ansiyellow>[b]ash or [a]gentic? </ansiyellow>")
+                    ).strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    choice = "b"
+                route = Route.AGENTIC if choice == "a" else Route.BASH
+
+            if route == Route.BASH:
+                if is_destructive(line):
+                    if not confirm_destructive(line):
+                        _audit_log("destructive_blocked", line)
+                        continue
+                exit_code, _ = execute_bash(line, cwd)
+                _last_exit = exit_code
+                _audit_log("bash", line, exit_code)
+                if exit_code != 0:
+                    _out(f"exit {exit_code}")
+                continue
+
+            if not _check_and_enforce_budget(db, config, session_id):
+                exit_code, _ = execute_bash(line, cwd)
+                if exit_code != 0:
+                    _out(f"exit {exit_code}")
+                continue
+
+            _spinner = _ThinkingSpinner()
+            _spinner.start()
+            try:
+                response = asyncio.run(_call_llm(backend, line, cwd, config, session_context))
+                _spinner.stop()
+            except KeyboardInterrupt:
+                _spinner.stop()
+                _out("cancelled")
+                continue
+
+            if response is None:
+                exit_code, _ = execute_bash(line, cwd)
+                if exit_code != 0:
+                    _out(f"exit {exit_code}")
+                continue
+
+            if response.plan:
+                last_exit = execute_plan(response.plan, cwd, description=line)
+                sys.stdout.write(f'  \033[38;5;238m·   ${response.cost_usd:.4f} · {response.prompt_tokens + response.completion_tokens} tok\033[0m\n')
+                sys.stdout.flush()
+                _log_event(db, session_id, response, str(response.plan), last_exit, line)
+                turns.append({"role": "user", "content": line})
+                turns.append({"role": "assistant", "content": f"plan: {response.plan}"})
+                _save_turns_if_needed(turns, session_id, config)
+                continue
+
+            command = _display_command_preview(response)
+            if command is None:
+                continue
+
+            ai_flagged = not response.safe
+            regex_flagged = is_destructive(command)
+            if ai_flagged or regex_flagged:
+                reason = "AI flagged as potentially unsafe" if ai_flagged else "matched destructive pattern"
+                if not confirm_destructive(command, reason=reason):
+                    continue
+
+            import time as _time
+            _t0 = _time.monotonic()
+            exit_code, _ = execute_bash(command, cwd)
+            _elapsed = _time.monotonic() - _t0
+            _last_exit = exit_code
+            _print_exec_result(exit_code, _elapsed, cost_usd=response.cost_usd, total_tokens=response.prompt_tokens + response.completion_tokens)
+
+            _log_event(db, session_id, response, command, exit_code, line)
+            _audit_log("agentic", command, exit_code)
+
+            # Track turn for session continuity
+            turns.append({"role": "user", "content": line})
+            turns.append({"role": "assistant", "content": f"command: {command}\nexplanation: {response.explanation}"})
+            _save_turns_if_needed(turns, session_id, config)
+    finally:
         _save_turns_if_needed(turns, session_id, config)

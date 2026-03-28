@@ -12,12 +12,8 @@ Key responsibilities:
 from __future__ import annotations
 import math
 import re
+import sys
 from collections import Counter
-
-from rich.console import Console
-from rich.panel import Panel
-
-console = Console()
 
 DESTRUCTIVE_PATTERNS: list[str] = [
     r"\brm\s+(-[^\s]*f[^\s]*\s+|--force\s+)",
@@ -68,13 +64,8 @@ def is_destructive(command: str) -> bool:
 
 def confirm_destructive(command: str) -> bool:
     """Display warning and require 'YES' to proceed. Returns True if confirmed."""
-    console.print()
-    console.print(Panel(
-        f"[bold yellow]command :[/bold yellow] {command}\n\n"
-        "[dim]This operation may be destructive or irreversible.[/dim]",
-        title="[bold red]⚠ destructive operation detected[/bold red]",
-        border_style="red",
-    ))
+    sys.stdout.write(f"\n! destructive operation detected\n  command: {command}\n  This operation may be destructive or irreversible.\n")
+    sys.stdout.flush()
     try:
         answer = input("  type YES to confirm: ").strip()
     except (EOFError, KeyboardInterrupt):

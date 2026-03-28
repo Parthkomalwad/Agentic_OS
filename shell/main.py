@@ -20,12 +20,7 @@ def main() -> None:
     import uuid
     from pathlib import Path
 
-    from rich.console import Console
-    from rich.panel import Panel
-
     from shell.config.schema import ShellConfig
-
-    console = Console()
 
     session_id = str(uuid.uuid4())
 
@@ -47,7 +42,8 @@ def main() -> None:
         if "api_key" in raw and raw["api_key"]:
             config.api_key = raw["api_key"]  # type: ignore[attr-defined]
     except (json.JSONDecodeError, ValueError, KeyError) as exc:
-        console.print(f"[yellow]Warning:[/yellow] Failed to parse config ({exc}). Using defaults.")
+        sys.stdout.write(f"Warning: Failed to parse config ({exc}). Using defaults.\n")
+        sys.stdout.flush()
         config = ShellConfig.defaults()
 
     # Re-run wizard if setup was not completed
@@ -66,13 +62,9 @@ def main() -> None:
         from shell.memory.store import load_session_context
         ctx = load_session_context(username)
         if ctx:
-            console.print(Panel(
-                f"[dim]Resuming session context ({len(ctx)} chars)[/dim]\n\n"
-                + ctx[:300]
-                + ("[dim]...[/dim]" if len(ctx) > 300 else ""),
-                title="[bold cyan]session resumed[/bold cyan]",
-                border_style="cyan",
-            ))
+            preview = ctx[:300] + ("..." if len(ctx) > 300 else "")
+            sys.stdout.write(f"session resumed ({len(ctx)} chars)\n{preview}\n")
+            sys.stdout.flush()
     except Exception:
         pass  # Session resume is best-effort
 

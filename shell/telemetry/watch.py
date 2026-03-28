@@ -9,8 +9,15 @@ from rich.table import Table
 from rich.text import Text
 from rich.columns import Columns
 
-console = Console(force_terminal=True, file=sys.stdout, width=44)
 _start_time = datetime.now()
+
+
+def _pane_width() -> int:
+    """Return current terminal pane width, falling back to 44."""
+    try:
+        return os.get_terminal_size(sys.stdout.fileno()).columns
+    except Exception:
+        return 44
 
 # ── helpers ──────────────────────────────────────────────
 
@@ -212,7 +219,7 @@ def _panel_tokens(db):
         table.add_row(row["day"], str(row["calls"]), f"${row['cost']:.4f}" if row["cost"] else "$0.0000")
     from io import StringIO
     buf = StringIO()
-    Console(file=buf, force_terminal=False, width=40).print(table)
+    Console(file=buf, force_terminal=False, width=max(_pane_width() - 4, 36)).print(table)
     t.append(buf.getvalue())
     return Panel(t, title="[color(141) bold]◈ tokens[/color(141) bold]", border_style="color(55)", padding=(0, 1))
 
@@ -238,8 +245,9 @@ def _panel_shortcuts():
 
 def _render_all(db, model) -> str:
     from io import StringIO
+    w = _pane_width()
     buf = StringIO()
-    bc = Console(file=buf, force_terminal=True, width=44)
+    bc = Console(file=buf, force_terminal=True, width=w)
     bc.print(_panel_session(db, model))
     bc.print(_panel_system())
     bc.print(_panel_git())

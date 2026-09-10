@@ -5,7 +5,7 @@
 # Build:  docker build -t sable-playground -f docker/Dockerfile.playground .
 # Run:    scripts/playground.ps1   (Windows)   |   scripts/playground.sh (Linux/macOS)
 
-FROM ubuntu:22.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
